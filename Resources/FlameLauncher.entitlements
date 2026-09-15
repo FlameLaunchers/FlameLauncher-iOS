@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ⚠️ 이 파일은 **직접 고친다.** project.yml 의 `entitlements:` 키로 관리하면 안 된다:
+       - `properties:` 를 두면 xcodegen 이 매번 다시 써서 Xcode 가
+         "Entitlements file was modified during the build" 로 빌드를 거부한다.
+       - `properties:` 없이 `path:` 만 두면 **빈 plist 로 덮어써 버린다.**
+     그래서 project.yml 은 CODE_SIGN_ENTITLEMENTS 빌드 설정으로만 이 경로를 가리킨다.
+-->
+<plist version="1.0">
+<dict>
+	<!-- 디버거(StikDebug / SideStore / Xcode)가 붙어야 JIT 가 켜진다.
+	     Xcode 는 Debug 빌드에 자동으로 넣지만, 사이드로드용 Release 빌드에는 명시해야 한다. -->
+	<key>com.apple.security.get-task-allow</key>
+	<true/>
+
+	<!-- ⚠️ 아래 두 개는 App ID 에 해당 capability 가 켜져 있어야 서명이 통과한다.
+	     와일드카드 프로파일에는 없어서 꺼둔다 — 켜려면 개발자 포털에서 전용 App ID 를
+	     만들고 capability 를 추가한 뒤 주석을 풀 것.
+	<key>com.apple.developer.kernel.extended-virtual-addressing</key>
+	<true/>
+	<key>com.apple.developer.kernel.increased-memory-limit</key>
+	<true/>
+	-->
+
+	<!-- ⚠️ com.apple.security.cs.allow-jit 은 넣어도 소용없다. macOS 하드닝 런타임 키라
+	     iOS 프로비저닝 프로파일이 허가하지 않아 서명 단계에서 떨어져 나간다(확인함).
+	     맥('Designed for iPad')에서는 JIT 대신 -Xint 로 돈다 — JvmSettings 참고. -->
+</dict>
+</plist>

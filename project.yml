@@ -1,0 +1,267 @@
+name: FlameLauncher
+options:
+  bundleIdPrefix: kr.co.donghyun
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    # ⚠️ arm64 전용. 네이티브 브릿지(dyld 우회, tinygl4angle 심볼 별칭)가 arm64 인라인
+    #    어셈블리를 쓰고, 가져오는 런타임 dylib 도 전부 arm64 다. Apple Silicon 맥의
+    #    시뮬레이터는 arm64 라 UI 작업에는 지장이 없다.
+    ARCHS: arm64
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "2.0.0"
+    CURRENT_PROJECT_VERSION: "2"
+    # 개인 Apple ID 팀. AltStore 가 갱신을 맡을 수 있고, 사이드로드 서명과 일관된다.
+    DEVELOPMENT_TEAM: H3YJYXT6VK
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  FlameLauncher:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+        # 이 둘은 별도 dylib 타깃이 컴파일한다 — 앱 바이너리에 함께 들어가면 안 된다.
+        # (tinygl4angle 은 ANGLE 심볼을 dynamic_lookup 으로 미루기 때문에 앱에 넣으면 링크가 깨진다)
+        excludes:
+          - "Natives/gl4es/**"
+          - "Natives/awt_xawt/**"
+      # 네이티브 런타임 — Scripts/fetch-runtime.sh 가 채운다(빈 채로도 빌드는 된다).
+      # LWJGL 3.4.1 네이티브(26.2+). LWJGL dylib 4개만 들어 있고, 렌더러·OpenAL 등은
+      # 기본 Frameworks/ 에서 찾는다(org.lwjgl.librarypath 가 두 경로를 모두 본다).
+      # ⚠️ Frameworks/ **하위**에 둔다. 번들 루트에 폴더로 두면 코드서명이 붙지 않아
+      #    기기에서 "invalid code signature" 로 dlopen 이 거부된다.
+      - path: Runtime/Frameworks341
+        buildPhase:
+          copyFiles:
+            destination: frameworks
+            subpath: lwjgl341
+        codeSign: true
+        excludes: [".gitkeep"]
+      - path: Runtime/Frameworks
+        buildPhase:
+          copyFiles:
+            destination: frameworks
+            subpath: ""
+        # ⚠️ 번들 안의 Mach-O 는 전부 앱 서명으로 다시 서명돼야 한다.
+        #    안 하면 기기에서 "invalid code signature" 로 실행되지 않는다.
+        codeSign: true
+        excludes: [".gitkeep"]
+      # 패치된 LWJGL / cacio 는 자바가 클래스패스로 읽으므로 번들 루트에 폴더째 둔다.
+      - path: Runtime/libs
+        type: folder
+      # LWJGL 3.4.1 전용 스택(26.2+). 기본 스택과 섞으면 1.21.x 가 깨지므로 따로 둔다.
+      - path: Runtime/libs341
+        type: folder
+      - path: Runtime/libs_caciocavallo
+        type: folder
+      - path: Runtime/libs_caciocavallo17
+        type: folder
+      # 앱 아이콘과 UI 아이콘. 안드로이드 res/ 에서 옮겨왔다.
+      - path: Resources/Assets.xcassets
+      # CurseForge API 키. 저장소에는 없고(.gitignore) 각자 로컬에 둔다 —
+      # 안드로이드의 local.properties 와 같은 역할이다. 없으면 CurseForge 검색만 꺼진다.
+      - path: Resources/Secrets.plist
+        optional: true
+      # iOS 26 디버거 보조 JIT 스크립트. StikDebug 이 이걸 읽어서 JVM 의 brk 트랩을
+      # 처리하고 RX 영역을 대신 할당해 준다 (Amethyst-iOS, GPL-3.0).
+      - path: Resources/UniversalJIT26.js
+      - path: Resources/UniversalJIT26Extension.js
+      # iOS(arm64) OpenJDK. 번들에 넣어두면 사용자가 따로 준비할 게 없다.
+      # 기기 Documents/runtimes/ 에 넣은 JRE 가 있으면 그쪽이 우선한다.
+      - path: Runtime/java_runtimes
+        type: folder
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleDisplayName: FlameLauncher
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        UILaunchScreen: {}
+        # 앱 전체 가로 고정 — 화면 버튼 배치가 가로 기준이고 게임도 가로로만 뜬다.
+        # ⚠️ 이게 없으면 아이패드에서 UISupportedInterfaceOrientations 가 **무시된다** —
+        #    멀티태스킹 가능 앱은 네 방향을 전부 지원해야 하기 때문이다.
+        #    가로 고정이 목적이므로 전체 화면을 요구한다.
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIUserInterfaceStyle: Dark
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        NSMicrophoneUsageDescription: "인게임 음성 채팅 모드에서 마이크를 사용합니다."
+        NSLocalNetworkUsageDescription: "같은 Wi-Fi의 친구와 LAN 멀티플레이를 하기 위해 사용합니다."
+        ITSAppUsesNonExemptEncryption: false
+        # JIT 도구를 URL 스킴으로 부른다. 여기 없으면 canOpenURL 이 늘 NO 라
+        # "도구가 없는 것"과 "못 물어본 것"을 구분할 수 없다.
+        LSApplicationQueriesSchemes:
+          - stikjit
+          - sidestore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: kr.co.donghyun.flamelauncher
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        # ⚠️ `entitlements:` 키를 쓰지 않고 빌드 설정으로 직접 가리킨다.
+        #    `entitlements.properties` 를 쓰면 xcodegen 이 파일을 다시 써서 Xcode 가
+        #    "Entitlements file was modified during the build" 로 빌드를 거부하고,
+        #    `properties` 없이 `entitlements.path` 만 쓰면 **빈 plist 로 덮어써 버린다**.
+        #    파일 내용은 Resources/FlameLauncher.entitlements 에서 직접 관리한다.
+        CODE_SIGN_ENTITLEMENTS: Resources/FlameLauncher.entitlements
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/Natives/FlameNative.h
+        HEADER_SEARCH_PATHS: $(SRCROOT)/Sources/Natives $(SRCROOT)/Sources/Natives/include
+        # 패치된 LWJGL 이 pojav* 심볼을 RTLD_DEFAULT 로 찾아간다 — 실행 파일이 심볼을 내보내야 한다.
+        # 테라코타는 정적 라이브러리로 링크한다(Scripts/build-terracotta.sh 가 만든다).
+        # dylib 이 아니라 .a 인 이유: 번들에 파일을 하나 더 넣고 서명까지 붙일 필요가 없다.
+        OTHER_LDFLAGS: -Xlinker -export_dynamic $(SRCROOT)/Runtime/Terracotta/libterracotta.a
+        # 런타임 dylib(libgl4es / libOSMesa / MoltenVK …)은 Frameworks/ 에 놓고 @rpath 로 연다.
+        LD_RUNPATH_SEARCH_PATHS: $(inherited) @executable_path/Frameworks
+        # 게임 실행 중에는 우리 코드가 아니라 JVM 이 죽는 게 정상 경로라, 심볼을 남겨 둬야
+        # 크래시 로그에서 원인을 볼 수 있다.
+        DEPLOYMENT_POSTPROCESSING: NO
+        # ⚠️ Xcode 16+ 는 Debug 빌드에서 실행 파일을 얇은 스텁으로 만들고 본체를
+        #    FlameLauncher.debug.dylib 로 빼서 dlopen 한다(SwiftUI Previews 용).
+        #    그러면 우리 main.m 이 진짜 진입점이 아니게 되고, JLI 가 호스트 main 으로
+        #    돌아올 때(apple_main) 엉뚱한 진입점이 다시 불린다 — PojavLauncher 와 같은
+        #    단일 실행 파일 구조여야 한다.
+        ENABLE_DEBUG_DYLIB: NO
+        GCC_WARN_64_TO_32_BIT_CONVERSION: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    postBuildScripts:
+      # ⚠️ 미리 빌드된 dylib(렌더러·LWJGL·MoltenVK·AltKit)은 그냥 복사만 되면 **서명이 없다**.
+      #    iOS 는 번들 안의 Mach-O 가 전부 앱과 같은 신원으로 서명돼 있어야 로드해 준다 —
+      #    서명이 없으면 기기에서 dlopen 이 실패하고 게임이 검은 화면으로 뜬다.
+      #    Xcode 의 "Code Sign On Copy" 는 이 복사 단계에 적용되지 않아 직접 서명한다.
+      - name: 번들 dylib 서명
+        basedOnDependencyAnalysis: false
+        script: |
+          set -e
+          [ "${CODE_SIGNING_ALLOWED:-YES}" = "YES" ] || exit 0
+          [ -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" ] || exit 0
+          DIR="${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}"
+          [ -d "$DIR" ] || exit 0
+
+          # .framework 는 번들째, 나머지는 파일 단위로 서명한다.
+          find "$DIR" -maxdepth 1 -name '*.framework' -print0 | while IFS= read -r -d '' fw; do
+            codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --timestamp=none "$fw"
+          done
+          find "$DIR" -maxdepth 1 -name '*.dylib' -print0 | while IFS= read -r -d '' lib; do
+            codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --timestamp=none "$lib"
+          done
+
+          # LWJGL 3.4.1 전용 스택(26.2+). 하위 폴더라 위 maxdepth 1 에 안 걸린다.
+          # (.framework 안의 dylib 은 건드리면 안 된다 — 번들 봉인이 깨진다. 그래서 따로 돈다)
+          if [ -d "$DIR/lwjgl341" ]; then
+            find "$DIR/lwjgl341" -name '*.dylib' -print0 | while IFS= read -r -d '' lib; do
+              codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --timestamp=none "$lib"
+            done
+          fi
+
+          # ⚠️ headful AWT 스텁을 **JRE 안에** 넣는다.
+          #    JRE 는 java.awt.Color 같은 클래스를 초기화할 때
+          #    <java_home>/lib/libawt_xawt.dylib 을 이름으로 dlopen 한다.
+          #    없으면 "UnsatisfiedLinkError: Can't load library: …/libawt_xawt.dylib" 로
+          #    java.awt.Color 초기화가 실패하고, 그걸 쓰는 화면이 통째로 죽는다
+          #    (NeoForge 1.21.6 의 로딩 오버레이가 그랬다).
+          #    ⚠️ 실행 시점에 심볼릭 링크를 걸 수는 없다 — 번들 안 JRE 는 읽기 전용이다.
+          AWT_STUB="$DIR/libawt_xawt.dylib"
+          JRE_ROOT="${TARGET_BUILD_DIR}/${WRAPPER_NAME}/java_runtimes"
+          if [ -f "$AWT_STUB" ] && [ -d "$JRE_ROOT" ]; then
+            for jre in "$JRE_ROOT"/*/; do
+              [ -d "$jre/lib" ] || continue
+              cp -f "$AWT_STUB" "$jre/lib/libawt_xawt.dylib"
+            done
+          fi
+
+          # ⚠️ JRE 안의 dylib(libjli, libjvm, …)도 전부 재서명해야 한다.
+          #    상류(Amethyst) 서명이 그대로 남아 있으면 dlopen 이
+          #    "code signature invalid" 로 거부한다 — 실제로 그렇게 막혔다.
+          JRE="${TARGET_BUILD_DIR}/${WRAPPER_NAME}/java_runtimes"
+          if [ -d "$JRE" ]; then
+            find "$JRE" -name '*.dylib' -print0 | while IFS= read -r -d '' lib; do
+              codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --timestamp=none "$lib"
+            done
+            echo "JRE dylib 서명: $(find "$JRE" -name '*.dylib' | wc -l | tr -d ' ')개"
+          fi
+          echo "Frameworks 서명: $(find "$DIR" -maxdepth 1 \( -name '*.dylib' -o -name '*.framework' \) | wc -l | tr -d ' ')개"
+
+    dependencies:
+      # ⚠️ Frameworks/ 아래로 넣어야 한다 — @rpath 가 @executable_path/Frameworks 이고,
+      #    LWJGL/JRE 는 이 둘을 그 경로에서 이름으로 dlopen 한다.
+      - target: tinygl4angle
+        embed: true
+        codeSign: true
+        copy:
+          destination: frameworks
+      - target: awt_xawt
+        embed: true
+        codeSign: true
+        copy:
+          destination: frameworks
+
+  FlameLauncherTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: FlameLauncher
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: kr.co.donghyun.flamelauncher.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+  # 데스크톱 OpenGL → MetalANGLE shim. LWJGL 이 dlopen 으로 여는 별도 dylib 이어야 한다.
+  tinygl4angle:
+    type: library.dynamic
+    platform: iOS
+    sources:
+      - Sources/Natives/gl4es/tinygl4angle.m
+      - Sources/Natives/gl4es/string_utils.c
+    settings:
+      base:
+        # ⚠️ 기기 빌드에서는 ANGLE 프레임워크를 **반드시 링크**해야 한다.
+        #    tinygl4angle 자체는 데스크톱 GL 보조 함수 51 개만 내보내고, 코어 GL
+        #    (glGetString / glGetIntegerv …)은 libGLESv2 에, EGL 은 libEGL 에 있다.
+        #    LWJGL 은 자바에서 dlopen(libtinygl4angle) → dlsym(glGetString) 으로 찾는데,
+        #    dlsym 은 그 이미지의 **의존성까지** 훑으므로 링크돼 있어야 잡힌다.
+        #    안 하면 GL.createCapabilities() 가
+        #    "Core OpenGL functions could not be found" 로 죽는다. (상류 CMake 와 동일)
+        #
+        #    시뮬레이터에는 이 프레임워크들이 기기용 arm64 라 링크하면 빌드가 깨진다 —
+        #    그래서 SDK 조건부로 건다.
+        OTHER_LDFLAGS: -undefined dynamic_lookup
+        OTHER_LDFLAGS[sdk=iphoneos*]: -undefined dynamic_lookup -F$(SRCROOT)/Runtime/Frameworks -framework libEGL -framework libGLESv2
+        DYLIB_INSTALL_NAME_BASE: "@rpath"
+        EXECUTABLE_PREFIX: lib
+        HEADER_SEARCH_PATHS: $(SRCROOT)/Sources/Natives/include $(SRCROOT)/Sources/Natives/gl4es
+        GCC_WARN_UNUSED_FUNCTION: NO
+
+  # JRE 가 이름으로 dlopen 하는 headful AWT 네이티브의 no-op 스텁.
+  # cacio 가 toolkit 을 가로채므로 함수 본문은 전부 비어 있어도 된다.
+  awt_xawt:
+    type: library.dynamic
+    platform: iOS
+    sources:
+      - Sources/Natives/awt_xawt/xawt_fake.m
+    settings:
+      base:
+        OTHER_LDFLAGS: -undefined dynamic_lookup
+        DYLIB_INSTALL_NAME_BASE: "@rpath"
+        EXECUTABLE_PREFIX: lib
+        HEADER_SEARCH_PATHS: $(SRCROOT)/Sources/Natives/include
+
+schemes:
+  FlameLauncher:
+    build:
+      targets:
+        FlameLauncher: all
+        FlameLauncherTests: [test]
+    test:
+      targets:
+        - FlameLauncherTests

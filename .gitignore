@@ -1,0 +1,43 @@
+# ── 생성물 ──────────────────────────────────────────────────────────────────
+# xcodegen 이 project.yml 에서 만든다. 커밋하면 병합 충돌의 주범이 된다.
+FlameLauncher.xcodeproj/
+# project.yml 의 info.properties 가 만든다.
+Resources/Info.plist
+
+# ⚠️ Resources/FlameLauncher.entitlements 는 **손으로 관리하므로 커밋한다.**
+#    (예전에는 여기서 무시했는데, project.yml 은 이 파일을 경로로만 가리키고
+#     내용을 만들어 주지 않는다 — 무시하면 새로 받은 사람은 서명이 깨진다)
+
+# ── 빌드 산출물 ─────────────────────────────────────────────────────────────
+# ⚠️ 접두사로 잡는다. 예전에는 build/ · build-sim/ · build-test/ 만 적어 뒀는데
+#    xcodebuild 에 다른 -derivedDataPath 를 주면 build-mac/ 같은 폴더가 생기고,
+#    그 안의 앱 번들에는 **Secrets.plist 와 embedded.mobileprovision 이 들어 있다.**
+#    (실제로 491MB 짜리 build-mac/ 이 무시되지 않은 채 남아 있었다)
+build*/
+DerivedData*/
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.xcarchive
+
+# ── 네이티브 런타임 ─────────────────────────────────────────────────────────
+# 렌더러 dylib · JRE · LWJGL jar 은 Scripts/fetch-runtime.sh 가 가져오고,
+# libmobileglues / libterracotta / libspirv-cross 는 Scripts/build-*.sh 가 만든다.
+# 전부 수백 MB 라 저장소에 두지 않는다. 폴더는 project.yml 이 참조하므로 남긴다.
+Runtime/**
+!Runtime/*/
+!Runtime/**/.gitkeep
+
+# ── 비밀 ────────────────────────────────────────────────────────────────────
+# CurseForge API 키. 안드로이드의 local.properties 와 같은 역할이다.
+Resources/Secrets.plist
+
+# ── 도구 부산물 ─────────────────────────────────────────────────────────────
+# Scripts/build-terracotta.sh 가 임시 디렉터리에서 돌지만, 손으로 돌려 본 흔적이
+# 남는 경우가 있다.
+target/
+.DS_Store
+*.swp
+xcuserdata/
+*.xcuserstate
+.swiftpm/

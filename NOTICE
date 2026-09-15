@@ -1,0 +1,80 @@
+FlameLauncher for iOS
+Copyright (C) 2026 Donghyun Yang
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. See LICENSE for the full text.
+
+
+WHY AGPL-3.0
+============
+
+This project is not AGPL by preference; it is AGPL by obligation. The licence
+of a combined work is decided by the strongest copyleft it links against, and
+here that is Terracotta's AGPL-3.0.
+
+    Component                        Licence        How it is used
+    -------------------------------  -------------  --------------------------
+    Terracotta (PCL-Community fork)  AGPL-3.0       linked statically
+                                                    (Runtime/Terracotta/
+                                                     libterracotta.a)
+    Amethyst-iOS / PojavLauncher     GPL-3.0        JavaApp, native bridges,
+                                                    patched LWJGL + GLFW
+    EasyTier (burningtnt fork)       LGPL-3.0       inside Terracotta
+    MobileGlues                      LGPL-2.1-only  renderer
+                                                    (Runtime/Frameworks/
+                                                     libmobileglues.dylib)
+    LWJGL                            BSD-3-Clause   3.3.3 and 3.4.1 stacks
+    OpenJDK (Temurin)                GPL-2.0 + CE   bundled JRE
+
+GPL-3.0 code may be combined into an AGPL-3.0 work -- GPLv3 section 13 permits
+exactly this -- and the result must be distributed under AGPL-3.0. That is what
+this repository does.
+
+
+CORRECTION TO EARLIER RELEASES
+==============================
+
+Earlier builds of the Android project shipped an LGPL-3.0 LICENSE file. That
+was wrong in two ways: the tree already contained PojavLauncher core (GPL-3.0),
+and it shipped libterracotta.so (AGPL-3.0). Both projects now carry AGPL-3.0,
+which is what the combination has required all along.
+
+
+MODIFICATIONS TO UPSTREAM SOURCES
+=================================
+
+No upstream source is vendored as a patched copy. Every modification is applied
+at build time by a script under Scripts/, so the diff against upstream stays
+readable and each patch fails loudly if upstream moves:
+
+    Scripts/build-mobileglues.sh   15 patches. Mach-O has no
+                                   __attribute__((alias)); ES 3.0 fallbacks for
+                                   ES 3.2/3.1 entry points; integer vertex
+                                   attribute signedness (Metal requires the
+                                   signedness of a vertex format to match the
+                                   shader declaration, GL does not); RTLD_SELF
+                                   instead of the Android RTLD_DEFAULT constant
+                                   in glXGetProcAddress.
+
+    Scripts/build-terracotta.sh     5 patches. Pins EasyTier to the tag the
+                                   repository declares; adds iOS to the
+                                   InterfaceFilter branch (the macOS branch
+                                   shells out to `networksetup`, which iOS does
+                                   not have); exposes the HTTP control server
+                                   and a single C entry point for Swift.
+
+    Scripts/build-javaapp.sh       GLFW shims for LWJGL 3.4.1, and a null guard
+                                   in glfwGetInputMode.
+
+Running a script prints every patch it applied.
+
+
+TRADEMARKS
+==========
+
+Minecraft is a trademark of Mojang AB. This project is not affiliated with,
+endorsed by, or connected to Mojang AB or Microsoft. It ships no Minecraft
+game assets; the game is downloaded from Mojang's own servers by the user,
+using the user's own account.
