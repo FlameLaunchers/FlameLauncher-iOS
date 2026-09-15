@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// 안드로이드 `data.jvm.JvmSettings` 이식. 기본값·인자 구성 모두 그대로 유지한다.
 struct JvmSettings: Codable, Equatable {
@@ -24,6 +25,15 @@ struct JvmSettings: Codable, Equatable {
     var fullscreen: Bool = true
     var resolutionScalePercent: Int = 100
 
+    /// HUD(인벤토리·핫바) 크기. 0 = 마인크래프트 기본, 그 외는 강제할 GUI 스케일.
+    ///
+    /// ⚠️ 마인크래프트는 "가상 화면 ≥ 320x240" 을 하드코딩해서 GUI 스케일에 상한을 건다
+    ///    (`Window.calculateScale`). 폰 가로 화면에서는 높이가 먼저 걸려 스케일 2 에서
+    ///    막히고, 슬롯 한 칸이 22pt — 애플 권장 터치 영역 44pt 의 절반이다.
+    ///    해상도를 어떻게 만져도 최대 1.28배까지밖에 못 키운다.
+    ///    그래서 0 이 아니면 에이전트가 그 하한 자체를 낮춘다([[IosFsAgent.patchGuiFloor]]).
+    var hudScale: Int = 0
+
     static let resScaleMin = 25
     static let resScaleMax = 100
 
@@ -38,6 +48,148 @@ struct JvmSettings: Codable, Equatable {
         let w = max(Int(Double(width) * s) & ~1, 2)
         let h = max(Int(Double(height) * s) & ~1, 2)
         return (w, h)
+    }
+
+    /// 바닐라에서 **가장 키가 큰** 화면의 높이(GUI 단위) — 대형 상자(6줄, 114+6*18).
+    /// 가상 화면이 이보다 낮으면 그 화면의 위아래가 화면 밖으로 잘린다.
+    ///
+    /// ⚠️ 마인크래프트의 하한 240 이 바로 이것에 여유를 둔 값이다. 우리가 하한을 낮출 때도
+    ///    이 선은 지켜야 "HUD 는 커졌는데 상자를 못 쓴다" 가 안 된다.
+    ///    (인벤토리·제작대·모루는 166 이라 더 여유롭다)
+    static let tallestGuiHeight = 222
+
+    /// 이 프레임버퍼에서 **아무것도 잘리지 않는** 최대 GUI 스케일.
+    static func maxHudScale(framebufferHeight: Int) -> Int {
+        max(1, min(framebufferHeight / tallestGuiHeight, 4))
+    }
+
+    /// 사용자가 고른 HUD 크기를 잘리지 않는 범위로 자른다.
+    static func effectiveHudScale(_ hudScale: Int, framebufferHeight: Int) -> Int {
+        min(hudScale, maxHudScale(framebufferHeight: framebufferHeight))
+    }
+
+    /// 마인크really가 실제로 쓸 GUI 스케일. 핫바 터치 영역도 이 값으로 잡는다.
+    static func effectiveGuiScale(
+        hudScale: Int, optionsGuiScale: Int, framebuffer: (w: Int, h: Int)
+    ) -> Int {
+        let auto = max(1, min(framebuffer.w / 320, framebuffer.h / 240))
+        guard hudScale > 0 else {
+            // "자동" 이면 게임 안에서 고른 값을 존중하고, 범위를 벗어나면 마인크래프트와
+            // 같은 규칙으로 되돌린다.
+            return (1...auto).contains(optionsGuiScale) ? optionsGuiScale : auto
+        }
+        return effectiveHudScale(hudScale, framebufferHeight: framebuffer.h)
+    }
+
+    /// `hudScale` 을 실제로 받아내기 위해 낮춰야 하는 하한 `"<w>x<h>"`.
+    /// 이미 기본 하한으로도 되는 값이면 nil(패치할 이유가 없다).
+    static func guiFloorSpec(hudScale: Int, framebuffer: (w: Int, h: Int)) -> String? {
+        let scale = effectiveHudScale(hudScale, framebufferHeight: framebuffer.h)
+        guard scale > 1 else { return nil }
+        let floorW = min(320, framebuffer.w / scale)
+        let floorH = min(240, framebuffer.h / scale)
+        guard floorW < 320 || floorH < 240 else { return nil }
+        return "\(floorW)x\(floorH)"
+    }
+
+    /// 이 HUD 스케일을 **잘림 없이** 쓰려면 필요한 최소 렌더 해상도(%).
+    /// 설정 화면이 "60% 이상이면 3배 가능" 을 안내하는 데 쓴다.
+    static func minResolutionPercent(forHudScale scale: Int, fullHeightPx: Int) -> Int? {
+        guard scale > 1, fullHeightPx > 0 else { return nil }
+        let needed = tallestGuiHeight * scale
+        let percent = Int((Double(needed) / Double(fullHeightPx) * 100).rounded(.up))
+        // 슬라이더가 5 단위라 거기에 맞춰 올린다.
+        let snapped = (percent + 4) / 5 * 5
+        return snapped <= resScaleMax ? max(snapped, resScaleMin) : nil
+    }
+
+    /// 이 해상도 배율에서 마인크래프트가 **실제로 허용하는** GUI 스케일.
+    ///
+    /// ⚠️ 설정에서 GUI 스케일을 3·4 로 올려도 마인크래프트가 되돌린다.
+    ///    `Window.calculateScale` 이 "가상 화면 ≥ 320x240" 을 강제하기 때문이다:
+    ///
+    ///        for (i = 1; i != guiScale && fbW/(i+1) >= 320 && fbH/(i+1) >= 240; ++i);
+    ///
+    ///    세로로 긴 폰 화면에서는 항상 높이가 먼저 걸려서 `fbH/240` 이 천장이 된다.
+    ///    즉 **해상도 배율이 HUD 크기를 결정한다** — 그런데 비례가 아니라 톱니라서,
+    ///    배율을 올렸는데 HUD 가 오히려 작아지는 구간이 생긴다(실측 iPhone 15):
+    ///
+    ///        45% → 1150x503, 스케일 2, 가상 575x251   (HUD 1.22배, 픽셀 0.67배)
+    ///        55% → 1405x614, 스케일 2, 가상 702x307   (기준)
+    ///        65% → 1661x726, 스케일 3, 가상 553x242   (HUD 1.27배, 픽셀 1.40배)
+    ///       100% → 2556x1118, 스케일 4, 가상 639x279  (HUD 1.10배, 픽셀 3.31배)
+    ///
+    ///    가상 높이가 240 에 가까울수록 HUD 가 크다(최대 ~1.28배). 슬라이더에
+    ///    이걸 같이 보여주지 않으면 사용자는 이 톱니를 알 방법이 없다.
+    static func guiScale(fullHeightPx: Int, percent: Int) -> Int {
+        let h = Int(Double(fullHeightPx) * Double(percent) / 100)
+        return max(1, min(h / 240, 4))
+    }
+
+    /// HUD 한 칸이 화면에서 차지하는 비율. 값이 클수록 HUD 가 크다.
+    /// (= GUI 스케일 / 프레임버퍼 높이. 가상 높이의 역수와 같다)
+    static func hudRelativeSize(fullHeightPx: Int, percent: Int) -> Double {
+        let h = Double(fullHeightPx) * Double(percent) / 100
+        return Double(guiScale(fullHeightPx: fullHeightPx, percent: percent)) / h
+    }
+
+    /// 마지막으로 게임이 보고한 **100% 기준** 프레임버퍼 높이(px).
+    /// 게임을 한 번도 안 띄웠으면 화면 크기로 어림한다(안전영역만큼 오차가 난다).
+    static var lastFullFramebufferHeight: Int {
+        get {
+            let saved = UserDefaults.standard.integer(forKey: "flame.fullFbHeight")
+            guard saved <= 0 else { return saved }
+            let b = UIScreen.main.nativeBounds   // 항상 세로 기준이라 가로 높이는 width
+            return Int(min(b.width, b.height))
+        }
+        set { UserDefaults.standard.set(newValue, forKey: "flame.fullFbHeight") }
+    }
+
+    // ⚠️ 여기에 `-XX:AllocateHeapAt` 으로 **자바 힙을 파일에 올리는** 길이 있었다. 지웠다.
+    //
+    //    되기는 됐다 — 코블버스 footprint 가 3053 → 480 MB 로 떨어졌다. 그런데 대가가
+    //    감당이 안 됐다. 부팅 419초 중 **GC 가 254초(61%)**, 1초 넘는 멈춤 28회, 최대 37.6초.
+    //    GC 는 힙 전체를 무작위로 훑는데 그 페이지가 디스크에 있으면 매번 폴트다.
+    //    (네이티브 데이터는 반대다 — 한 번 쓰고 순차로 읽으니 파일에 어울린다.
+    //     그쪽은 flame_alloc.c 가 계속 맡는다)
+    //
+    //    그리고 애초에 필요가 없었다. 같은 실행에서 라이브 셋은 1199 MB, 힙 밖은 885 MB
+    //    였다 — 힙을 RAM 에 두고도 예산 안에 들어간다. 옛 추정치(라이브 셋 1885)를
+    //    믿고 과하게 잡았던 것이다. 지금은 천장이 RAM 에 확실히 들어가는 값이라
+    //    이 길로 갈 일 자체가 없다(maxHeapCeilingMb 주석).
+    //
+    //    ⚠️ 되살리려면 `-XX:+AlwaysPreTouch` 로 폴트를 부팅 때 몰아 치우고 싶어지는데,
+    //       **그건 안 된다.** AlwaysPreTouch 는 코드 캐시도 미리 만지고, 우리 코드 캐시는
+    //       미러 매핑이라 RX 쪽이 쓰기 불가다. 그 자리에서 SIGBUS 로 죽는다:
+    //         [JIT26] mapping at RW=0x1394a8000, RX=0x12f4a8000
+    //         SIGBUS at os::pretouch_memory+0x3c, si_addr: 0x12f4a8000
+
+    /// 큰 네이티브 할당을 **파일 기반 매핑**으로 돌리는 할당자를 LWJGL 에 물린다.
+    ///
+    /// ⚠️ iOS 의 jetsam 은 `phys_footprint` 로 판정하는데, 거기에는 익명 메모리와 압축분만
+    ///    들어가고 **파일 기반(external)은 안 들어간다**. 실측(바닐라 1.21.4 + 서버
+    ///    리소스팩, 죽기 직전):
+    ///
+    ///        footprint 2759 MB = 익명 1135 + 압축 1528 · 파일기반 27
+    ///          tag 0 (JVM 힙·JIT)                1294 MB
+    ///          malloc_small (스프라이트 수천 장)   781 MB
+    ///          malloc_large (아틀라스 256 포함)    697 MB
+    ///
+    ///    마인크래프트의 `NativeImage` 와 GL 스테이징 버퍼는 전부 LWJGL 의 `MemoryUtil` 을
+    ///    지나가므로, 할당자 하나만 갈아끼우면 그만큼이 장부에서 빠진다. 힙(JVM)은 못
+    ///    옮기지만 나머지는 옮길 수 있다. (구현: Sources/Natives/flame_alloc.c)
+    ///
+    /// ⚠️ 주소를 인자로 넘기는 이유: dylib 은 JVM 보다 **먼저** 이 프로세스에 올라와 있어
+    ///    주소가 이미 확정이다. JVM 이 뜬 뒤 `System.setProperty` 로 심으면 LWJGL 의
+    ///    `MemoryUtil` 이 그보다 먼저 초기화될 수 있어 늦는다.
+    static func allocatorArgs() -> [String] {
+        var pointers = [UInt64](repeating: 0, count: 6)
+        flame_alloc_pointers(&pointers)
+        guard pointers.allSatisfy({ $0 != 0 }) else { return [] }
+
+        let names = ["malloc", "calloc", "realloc", "free", "aligned_alloc", "aligned_free"]
+        return zip(names, pointers).map { "-Dflame.alloc.\($0)=\($1)" }
+             + ["-Dorg.lwjgl.system.allocator=kr.co.donghyun.flame.FlameAllocator"]
     }
 
     /// JVM 인자 배열. 안드로이드 `toJvmArgArray` 에 PojavLauncher iOS 의 iOS 전용 인자를 더했다.
@@ -92,7 +244,8 @@ struct JvmSettings: Codable, Equatable {
             "-Djna.tmpdir=\(cache)",
             // LWJGL 이 "GLFW 는 첫 스레드에서만" 검사를 하는데, 위 이유로 통과할 수 없다.
             "-Dorg.lwjgl.glfw.checkThread0=false",
-            "-Dorg.lwjgl.system.allocator=system",
+            // ⚠️ 여기서 할당자를 지정하지 않는다. 뒤에 오는 allocatorArgs() 가
+            //    파일 기반 매핑 할당자를 지정하는데, 같은 -D 가 두 번 나가면 헷갈린다.
             "-Dlog4j2.formatMsgNoLookups=true",
         ]
 
@@ -147,8 +300,18 @@ struct JvmSettings: Codable, Equatable {
                 //    551MB 가 놀고 있었다. 그 상태에서 8192² 아틀라스를 잡으려다
                 //    남은 여유 577MB 를 넘겨 jetsam 으로 죽었다.
                 //    아틀라스·렌더러는 전부 힙 **밖**이라, 힙이 쥐고만 있는 건 순손실이다.
-                "-XX:MinHeapFreeRatio=10",
-                "-XX:MaxHeapFreeRatio=30",
+                //    후속 실측(같은 서버, 위 설정 적용 후): 커밋 928MB · GC 후 실사용
+                //    665MB → 노는 몫이 28.3% 로 **Max 30 바로 아래**라 G1 이 끝내 반납하지
+                //    않았다. 263MB 가 그대로 묶인 채 footprint 2930~3069MB 에서 죽었다.
+                //    한도를 더 조인다: 665 / 0.85 ≈ 782MB → 약 150MB 를 돌려받는다.
+                "-XX:MinHeapFreeRatio=5",
+                "-XX:MaxHeapFreeRatio=15",
+                // ⚠️ 비율만 낮춰서는 부족하다. G1 은 **GC 를 할 때만** 반납한다.
+                //    할당률이 낮은 구간(로딩 끝난 뒤)에서는 GC 가 안 돌아서 커밋이
+                //    그대로 남는다. 주기적 동시 GC 를 켜서 반납 기회를 만든다.
+                //    (SystemLoadThreshold 기본 0 = 부하와 무관하게 돈다)
+                "-XX:G1PeriodicGCInterval=15000",
+                "-XX:+G1PeriodicGCInvokesConcurrent",
             ]
         }
 
@@ -175,6 +338,23 @@ struct JvmSettings: Codable, Equatable {
         args += [
             // GC 일시정지를 한 줄씩 남긴다. 프레임이 끊길 때 GC 때문인지 아닌지를
             // 추측이 아니라 시간으로 확인할 수 있어야 한다(한 줄짜리라 로그가 안 늘어난다).
+            // ── 힙 **밖** 상한 ────────────────────────────────────────────────
+            //
+            // -Xmx 는 자바 힙만 묶는다. 그런데 jetsam 예산은 프로세스 전체를 본다 —
+            // 실측(CobbleVerse, 모드 137개): 힙 1920M 을 빼고도 **1122M** 이 힙 밖에
+            // 있었고, 여유가 29MB 까지 몰렸다. 그 1122M 의 큰 조각이 메타스페이스와
+            // JIT 코드 캐시인데 둘 다 기본값이 사실상 무제한이다.
+            //
+            // 모드가 많을수록 클래스가 많아 메타스페이스가, 코드가 많아 코드 캐시가
+            // 같이 자란다. 상한을 두면 그만큼이 힙과 텍스처 몫으로 남는다.
+            //
+            // ⚠️ 너무 조이면 안 된다. 메타스페이스가 모자라면
+            //    OutOfMemoryError: Metaspace 로 죽고, 코드 캐시가 차면 JIT 가 꺼져
+            //    인터프리터로 떨어진다(살아는 있지만 매우 느리다).
+            //    384M / 160M 은 모드 140개대에서 여유가 있는 값이다.
+            "-XX:MaxMetaspaceSize=384M",
+            "-XX:ReservedCodeCacheSize=160M",
+        ] + Self.allocatorArgs() + [
             "-Xlog:gc:stdout:time,level,tags",
             "-Duser.dir=\(userDir)",
             "-Duser.home=\(instanceDir.deletingLastPathComponent().path)",
@@ -325,7 +505,11 @@ enum JvmSettingsStore {
                                        JvmSettings.resScaleMax)
         // ⚠️ 예전 천장(물리 메모리의 절반)으로 저장해 둔 값은 jetsam 예산을 통째로 먹어서
         //    아틀라스가 쓸 자리를 남기지 않는다. 더는 고를 수 없는 값이면 권장값으로 되돌린다.
-        if s.maxHeapMb > maxHeapCeilingMb { s.maxHeapMb = JvmSettings().maxHeapMb }
+        // ⚠️ 천장을 넘으면 **천장으로 깎는다** — 기본값으로 되돌리지 않는다.
+        //    되돌리면 2176 로 저장해 둔 설정이 1536 으로 떨어지는데, 실측상 그건
+        //    코블버스의 라이브 셋(1199MB)을 93% 점유로 담아서 GC 가 폭주한다
+        //    (80초 동안 483회). 쓸 수 있는 만큼은 그대로 쓰게 둔다.
+        if s.maxHeapMb > maxHeapCeilingMb { s.maxHeapMb = maxHeapCeilingMb }
         return s
     }
 
@@ -353,11 +537,29 @@ enum JvmSettingsStore {
     ///    반드시 죽는 설정을 고를 수 있었다. 예산에서 힙 밖 몫을 떼고 남는 만큼만 연다.
     ///    (예산의 절반으로 자르는 것도 해봤지만 이번엔 반대로 빡빡해서 — 1280 은 힙 OOM 이
     ///     났다 — 정답 구간을 막았다)
-    static var maxHeapCeilingMb: Int { max(1024, jetsamBudgetMb - offHeapFloorMb) }
+    /// ⚠️ **RAM 에 확실히 들어가는 값**이어야 한다.
+    ///    예전 천장(예산 − 힙밖)은 2175 였는데, 그건 여유가 10 MB 밖에 안 남는 값이라
+    ///    슬라이더를 끝까지 올리면 반드시 죽거나(RAM) 디스크로 밀려나(느림) 버렸다.
+    ///    슬라이더의 최대값이 곧 함정인 셈이었다.
+    ///
+    /// ⚠️ 여유분은 128 이다. 처음엔 256 을 뗐는데 그러면 천장이 1919 가 되고, 코블버스가
+    ///    리소스 리로드 피크에서 힙을 89% 까지 채워 GC 가 돌기만 하다 멈춘다.
+    ///    그 피크는 **지나가는 값**이다 — 같은 팩이 부팅을 마치면 라이브 셋이 1199,
+    ///    타이틀에서는 832 MB 까지 내려간다. 그 한 번을 넘길 머리 공간이 필요하다.
+    ///    힙 밖은 실측 890 MB 에서 더 자라지 않는다(네이티브는 파일로 빠져 있다).
+    static var maxHeapCeilingMb: Int { max(1024, jetsamBudgetMb - offHeapFloorMb - 128) }
 
-    /// 힙 밖(아틀라스·렌더러·JVM 자체)이 최소한 쓰는 양. 실측값이다 —
-    /// 힙을 1280 으로 묶어도 프로세스 전체가 2298 MB 였다.
-    static let offHeapFloorMb = 1024
+    /// 힙 밖(아틀라스·렌더러·JVM 자체)이 최소한 쓰는 양.
+    ///
+    /// ⚠️ 예전 값은 1024 였다. 그건 **파일 기반 매핑 할당자가 생기기 전** 측정이다
+    ///    (힙을 1280 으로 묶어도 프로세스 전체가 2298 MB). 지금은 마인크래프트의
+    ///    NativeImage·GL 버퍼가 전부 파일 기반으로 빠져서 footprint 에 안 잡힌다 —
+    ///    실측(바닐라 1.21.4 + 서버 리소스팩): 전체 1150 = 힙커밋 736 + **힙 밖 414**.
+    ///
+    ///    무거운 모드팩에서는 메타스페이스·코드 캐시·JIT 미러가 커진다. 힙을 파일에
+    ///    올린 채로 코블버스(모드 137개)를 끝까지 돌려 **힙 밖만** 따로 쟀다:
+    ///    최대 885 MB. 그 실측값에 여유를 붙인다.
+    static let offHeapFloorMb = 896
 }
 
 extension JvmSettings {

@@ -130,6 +130,43 @@ struct GameLauncher {
         print("[FlameLauncher] FancyMenu 의 macOS 전용 창 아이콘을 껐습니다 (iOS 에 AppKit 이 없습니다)")
     }
 
+    /// Forge/NeoForge 1.17+ 의 **초기 로딩 창**(fmlearlydisplay)을 끈다.
+    ///
+    /// ⚠️ 이건 단순한 스플래시가 아니다. FML 이 Minecraft 보다 **먼저** GLFW 창과 GL
+    ///    컨텍스트를 만들고 자기 렌더 스레드를 돌린 뒤 그대로 Minecraft 에 넘긴다.
+    ///    모장 로고 구간(ForgeLoadingOverlay)은 그 early display 의 FBO 텍스처를
+    ///    메인 창에 블릿하는 것이고, 창 close 콜백도 계속 FML 쪽이 쥐고 있다.
+    ///
+    ///    MobileGlues(ANGLE Metal / GLES 3.0) 위에서는 그 블릿이 검은 화면으로 끝나고,
+    ///    뒤이어 close 콜백이 떠서 게임이 크래시 없이 조용히 exit(0) 한다:
+    ///      [Render thread/INFO] [minecraft/Minecraft]: Stopping!
+    ///    끄면 Minecraft 가 자기 창을 만들고 바닐라 LoadingOverlay 를 쓴다.
+    ///
+    /// ⚠️ `-Dfml.earlyprogresswindow=false` 는 1.17~1.18 시절 키라 52.x 는 쳐다보지도
+    ///    않는다(로그에 `Loading ImmediateWindowProvider fmlearlywindow` 가 그대로 뜬다).
+    ///    지금 스위치는 `config/fml.toml` 의 `earlyWindowControl` 하나뿐이다.
+    static func disableForgeEarlyWindow(in dir: URL) {
+        let libs = dir.appending(path: "libraries")
+        let hasEarlyDisplay = ["net/minecraftforge", "net/neoforged"].contains {
+            FileManager.default.fileExists(atPath: libs.appending(path: "\($0)/fmlearlydisplay").path)
+        }
+        guard hasEarlyDisplay else { return }
+
+        let file = dir.appending(path: "config/fml.toml")
+        let key = "earlyWindowControl"
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else {
+            // 첫 실행이라 아직 없다. 한 줄만 써 두면 night-config 의 spec correct 가
+            // 나머지 기본값을 채워 넣는다.
+            Paths.ensureDir(file.deletingLastPathComponent())
+            try? "\(key) = false\n".write(to: file, atomically: true, encoding: .utf8)
+            return
+        }
+        guard text.contains("\(key) = true") else { return }
+        try? text.replacingOccurrences(of: "\(key) = true", with: "\(key) = false")
+            .write(to: file, atomically: true, encoding: .utf8)
+        print("[FlameLauncher] Forge 초기 로딩 창을 껐습니다 (MobileGlues 에서 검은 화면 뒤 조용히 종료됩니다)")
+    }
+
     /// 확장된 JVM 인자에서 `-p` / `--module-path` 가 가리키는 jar 경로들.
     ///
     /// ⚠️ 같은 jar 이 모듈 경로와 클래스패스에 **동시에** 있으면 클래스가 두 로더에 생긴다.
@@ -306,9 +343,24 @@ struct GameLauncher {
         // 프로세스 CWD 를 인스턴스로 옮기지 않으면 읽기 전용인 앱 번들 기준이 돼서
         // FileNotFoundException 으로 로깅 초기화부터 실패한다.
         FileManager.default.changeCurrentDirectoryPath(dir.path)
-        let guiScale = GameOptions.sync(
+        // ⚠️ HUD 크기는 **잘리지 않는 선까지만** 허용한다. 사용자가 4배를 골랐어도
+        //    이 프레임버퍼에서 대형 상자가 잘리면 한 단계 내려서 쓴다
+        //    (JvmSettings.tallestGuiHeight 참고).
+        let framebuffer = (w: Int(screenSize.width), h: Int(screenSize.height))
+        let hudScale = JvmSettings.effectiveHudScale(settings.hudScale,
+                                                     framebufferHeight: framebuffer.h)
+        let optionsGuiScale = GameOptions.sync(
             file: dir.appending(path: "options.txt"),
-            settings: settings, modCount: modCount, versionId: meta.mcVersion
+            settings: settings, modCount: modCount, versionId: meta.mcVersion,
+            hudScale: hudScale
+        )
+        // 핫바 터치 영역이 화면 핫바와 정확히 겹치려면 **마인크래프트가 실제로 쓰는**
+        // 스케일이어야 한다. 예전에는 뷰가 스스로 어림했는데, 뷰 좌표(pt)로 320x240 을
+        // 나누는 바람에(마인크래프트는 프레임버퍼 px 로 나눈다) 절반짜리가 나왔다 —
+        // 그래서 "핫바 터치 영역 크기" 수동 설정이 필요했다. 여기서 한 번만 정한다.
+        let guiScale = JvmSettings.effectiveGuiScale(
+            hudScale: settings.hudScale, optionsGuiScale: optionsGuiScale,
+            framebuffer: framebuffer
         )
         GameOptions.syncIris(file: dir.appending(path: "config/iris.properties"))
 
@@ -327,6 +379,7 @@ struct GameLauncher {
         var argv = [java.home.appending(path: "bin/java").path]
         Self.repairUnreadableFiles(in: dir)
         Self.neutralizeMacOnlyModOptions(in: dir)
+        Self.disableForgeEarlyWindow(in: dir)
 
         // 컨테이너가 바뀌었으면 계획의 낡은 절대경로를 고쳐준다.
         ForgeInstallPlanner.migrateIfNeeded(instanceDir: dir)
@@ -351,6 +404,13 @@ struct GameLauncher {
             screenSize: (Int(screenSize.width), Int(screenSize.height))
         )
         argv.append("-DUIScreen.maximumFramesPerSecond=\(UIScreen.main.maximumFramesPerSecond)")
+
+        // HUD 확대: 마인크래프트의 320x240 하한을 에이전트가 낮추도록 알려준다.
+        // (왜 이렇게까지 하는지는 JvmSettings.hudScale / IosFsAgent.patchGuiFloor 참고)
+        if let floor = JvmSettings.guiFloorSpec(hudScale: settings.hudScale,
+                                                framebuffer: framebuffer) {
+            argv.append("-Dflame.guiFloor=\(floor)")
+        }
         let loaderArgs = Self.expandLoaderJvmArgs(meta.gameJvmArgs, instanceDir: dir, mcVersion: meta.mcVersion)
         argv += loaderArgs
 
@@ -378,6 +438,82 @@ struct GameLauncher {
             Paths.ensureDir(dir)
             env["MG_DIR_PATH"] = dir.path
             Self.writeMobileGluesConfig(in: dir)
+
+            // ── 무거운 모드팩에서는 텍스처 아틀라스를 강제로 줄인다 ──────────────
+            //
+            // MobileGlues 의 기본 판단은 "지금 남은 여유로 이 할당이 들어가는가" 다.
+            // 그런데 자바 힙은 그 뒤로도 -Xmx 까지 자란다. 아틀라스를 만들 때는 자리가
+            // 있어도, 힙이 다 자라고 나면 없다.
+            //
+            // 실측(CobbleVerse, 모드 308개): 8192×4096 아틀라스는 "들어간다"고 판정돼
+            // 그대로 잡혔고, 곧 자바 힙이 1436M/1536M 로 차면서 G1 이 Evacuation
+            // Failure 를 33회 내며 제자리걸음에 빠졌다. 크래시도 아니고 끝나지도 않는다.
+            //
+            // 모드가 많은 팩은 힙이 어차피 상한까지 갈 것이 거의 확실하므로, 그때는
+            // 아틀라스 쪽을 먼저 양보시킨다. 4096 이면 8192×4096 이 4096×2048 로 잡혀
+            // 100MB 남짓이 힙 몫으로 돌아간다. 텍스처는 흐려지지만 돌아가기는 한다.
+            //
+            // ⚠️ 가벼운 인스턴스에는 걸지 않는다. 바닐라까지 흐려질 이유가 없다.
+            // 모드가 많을수록 자바 힙이 더 필요하고, 그만큼 텍스처가 쓸 자리가 줄어든다.
+            // 그래서 상한을 단계로 둔다.
+            //
+            // ⚠️ 판단 근거를 두 가지로 둔다. mods/ 의 jar 수만 보면 놓친다 —
+            //    모드팩은 중첩 jar 가 많아서 파일 수가 실제 모드 수보다 훨씬 적다
+            //    (CobbleVerse 는 패브릭이 308개를 읽는데 이 값은 150 미만이었다).
+            //    그래서 모드팩 인스턴스는 최소 한 단계는 적용받게 한다.
+            let isModpack = meta.id.hasPrefix("modpack_")
+            let byModCount: Int? = {
+                if modCount >= 100 { return 2048 }   // 8192² → 2048². 흐려지지만 돌아간다
+                if modCount >= 50 || isModpack { return 4096 }
+                return nil                            // 가벼운 인스턴스는 적응 규칙에 맡긴다
+            }()
+
+
+            // ⚠️ **화면보다 작게는 절대 못 잡는다.**
+            //
+            //    MobileGlues 의 축소는 "이 상한을 넘는 텍스처"에 걸리는데, 마인크래프트의
+            //    메인 렌더 타깃도 그냥 텍스처다. 상한이 화면보다 작으면 렌더 타깃까지
+            //    줄여서 화면이 잘린다 — 실제로 그렇게 됐다:
+            //      MGTEX 1533x707 -> 766x353 (상한 1024 강제)
+            //    화면 크기 이하는 애초에 줄일 이유도 없다(그건 감당되는 크기다).
+            let screenMax = max(framebuffer.w, framebuffer.h)
+            let atlasCap = byModCount.map { max($0, screenMax) }
+            if let atlasCap {
+                env["MG_MAX_TEXTURE_DIM"] = String(atlasCap)
+            }
+
+            // ⚠️ 무거운 인스턴스는 **파일 기반 매핑 임계값을 낮춘다**.
+            //
+            //    기본 256 KB 는 아틀라스·큰 버퍼만 잡는다. 그런데 리소스팩 스프라이트는
+            //    한 장이 16~64 KB 라 그 그물을 빠져나가고, 수천 장이 모여 익명 메모리로
+            //    남는다 — 실측 `malloc_small` 297 MB(바닐라+서버팩), 코블버스에서는
+            //    힙 밖이 986 MB 까지 올라갔다.
+            //    마인크래프트는 스티칭이 끝나도 스프라이트마다 원본 NativeImage 를
+            //    `SpriteContents` 안에 계속 들고 있어서 해제되지도 않는다.
+            //
+            //    32 KB 로 내리면 그것들도 파일로 빠진다. 대신 매핑 수가 수천 개로 늘고
+            //    16 KB 페이지 정렬 때문에 낭비가 생기므로(그 낭비도 파일이라 장부에는
+            //    안 잡힌다) 가벼운 인스턴스에는 걸지 않는다.
+            if modCount >= 50 || isModpack {
+                env["FLAME_ALLOC_MMAP_MIN"] = "32768"
+            }
+
+            // ⚠️ 리소스 리로드의 **동시성**을 줄여 피크 라이브 셋 자체를 낮춘다.
+            //
+            //    마인크래프트는 `Util.backgroundExecutor()` 로 워커를 코어 수만큼 띄우고
+            //    (`Worker-ResourceReload-0..4`), 각 워커가 디코드한 이미지를 동시에 들고
+            //    있는다. 그래서 피크가 코어 수에 비례해 부푼다.
+            //
+            //    실측(코블버스): "Loading animations..." 구간에서 힙이 2048 중 1928 까지
+            //    차고 G1 이 17.2초짜리 full GC 를 돌기 시작한다. 힙을 1920 → 2047 로
+            //    키워 봤지만 같은 자리에서 막혔다 — 줄 수 있는 양의 문제가 아니라
+            //    **한 번에 필요한 양**의 문제다.
+            //
+            //    `max.bg.threads` 는 마인크래프트가 직접 읽는 값이다(Util.getMaxThreads).
+            //    줄이면 리로드가 느려지는 대신 동시에 살아 있는 이미지가 줄어든다.
+            argv.append("-Dmax.bg.threads=2")
+            print("[Flame] 모드 \(modCount)개\(isModpack ? " (모드팩)" : "")"
+                  + " · 아틀라스 상한 " + (atlasCap.map(String.init) ?? "없음"))
         }
 
         return LaunchPlan(javaHome: java.home, argv: argv, env: env,
@@ -409,8 +545,37 @@ struct GameLauncher {
         // 3) 바닐라 라이브러리
         // Forge 설치 도구 전용 라이브러리는 게임 클래스패스에서 뺀다(모듈 충돌 방지).
         // 설치 전용 라이브러리 + 프로세서 산출물. 둘 다 게임 클래스패스에서 뺀다.
+        // ⚠️ 바닐라가 요구하는 라이브러리는 무슨 일이 있어도 빼지 않는다.
+        //    설치 계획(forge_plan.json)은 로더 프로파일만 보고 "설치 전용"을 골라내는데,
+        //    Forge 의 프로파일은 바닐라를 inheritsFrom 으로 상속받아서 gson·guava 같은
+        //    공통 라이브러리를 자기 목록에 담지 않는다. 그래서 프로세서용으로 받아 둔
+        //    같은 라이브러리가 설치 전용으로 분류되어 게임에서 통째로 사라진다:
+        //      NoClassDefFoundError: com/google/gson/JsonSyntaxException
+        //    설치 쪽은 고쳤지만, **이미 만들어진 인스턴스의 계획 파일은 그대로**라
+        //    여기서 한 번 더 막는다(재설치 없이 살아난다).
+        let vanillaNeeded = ForgeProcessorRunner.vanillaLibraryPaths(instanceDir: dir,
+                                                               mcVersion: meta.mcVersion)
+        // ⚠️ 프로세서 산출물 제외는 **모듈 경로를 쓸 때만** 옳다.
+        //
+        //    NeoForge 는 -p 로 모듈 경로를 구성하고 FML 이 산출물을 -DlibraryDirectory +
+        //    maven 좌표로 직접 찾는다. 그때 같은 것을 클래스패스에도 두면 같은 패키지를
+        //    두 모듈이 export 해서 해석이 실패한다:
+        //      ResolutionException: Modules minecraft and neoforge export package …
+        //
+        //    그런데 Forge 52 는 -p 를 쓰지 않는다. ForgeBootstrap 이 **클래스패스로**
+        //    SECURE-BOOTSTRAP 을 만들기 때문에, 마지막 프로세서가 만든 패치된 클라이언트
+        //    (forge-<ver>-client.jar, 26.8MB — 이게 곧 게임이다)가 거기 있어야 한다.
+        //    빼면 이렇게 죽는다:
+        //      IllegalStateException: Could not find net/minecraft/client/Minecraft.class
+        //
+        //    중간 산출물(client-*-official.jar 등)은 모듈 경로와 무관하게
+        //    isLoaderIntermediateJar 가 따로 걸러낸다.
+        let processorOutputs = modulePath.isEmpty
+            ? []
+            : ForgeInstallPlanner.outputPaths(instanceDir: dir)
         let installOnly = ForgeInstallPlanner.installOnlyPaths(instanceDir: dir)
-            .union(ForgeInstallPlanner.outputPaths(instanceDir: dir))
+            .union(processorOutputs)
+            .subtracting(vanillaNeeded)
         let librariesDir = dir.appending(path: "libraries")
         if let walker = FileManager.default.enumerator(at: librariesDir, includingPropertiesForKeys: nil) {
             for case let url as URL in walker where url.pathExtension == "jar" {

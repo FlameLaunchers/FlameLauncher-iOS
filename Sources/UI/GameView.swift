@@ -21,7 +21,6 @@ struct GameView: View {
     @State private var appSettings = AppSettingsStore.load()
 
     @State private var controlsVisible = AppSettingsStore.load().controllerVisible
-    @State private var hotbarScale = AppSettingsStore.load().hotbarTouchScale
     @State private var guiScale = 0
     @State private var combatMode = false
 
@@ -47,22 +46,21 @@ struct GameView: View {
 
             GameSurface(
                 runtime: runtime, settings: settings, renderer: renderer,
-                guiScale: $guiScale, hotbarScale: $hotbarScale,
+                guiScale: $guiScale,
                 onReady: boot,
                 onCreate: { surface = $0 }
             )
-            // ⚠️ 아래쪽 SafeArea 만 남긴다 — 홈 인디케이터와 겹치지 않게.
+            // ⚠️ 아래쪽 SafeArea 도 내주지 않는다 — 화면을 꽉 채운다.
             //
-            //    iOS 에는 홈 제스처를 **완전히 끄는 API 가 없다.**
-            //    `persistentSystemOverlays(.hidden)` 은 잠시 숨길 뿐 화면을 만지면 다시 뜨고,
-            //    `defersSystemGestures(.all)` 도 "한 번 더 쓸어야 나감" 이지 무효화가 아니다.
-            //    그래서 화면 맨 아래에서 **시작하는 드래그**는 시스템이 먼저 가져간다 —
-            //    핫바·인벤토리 맨 아랫줄을 끌어 옮기는 동작이 정확히 거기에 걸린다.
+            //    예전에는 홈 인디케이터 띠(약 21pt)를 비워 뒀다. 화면 맨 아래에서
+            //    **시작하는 드래그**는 시스템이 먼저 가져가서(iOS 에 홈 제스처를 완전히
+            //    끄는 API 는 없다 — `defersSystemGestures` 도 "한 번 더 쓸어야 나감"
+            //    이지 무효화가 아니다) 인벤토리 맨 아랫줄을 못 끄는 문제가 있었다.
             //
-            //    유일하게 확실한 방법은 그 띠 위로 게임을 올리는 것이다. 세로로 약 21pt 를
-            //    내주지만, 아랫줄이 안 눌리는 것보다 낫다. 홈 버튼 기기는 bottom inset 이
-            //    0 이라 아무 영향이 없다.
-            .ignoresSafeArea(.all, edges: [.top, .leading, .trailing])
+            //    이제 HUD 크기를 직접 키울 수 있으니 그 띠를 비워 둘 이유가 없다.
+            //    비워 두면 프레임버퍼 높이가 줄어 오히려 HUD 상한이 내려간다
+            //    (GUI 스케일 천장 = 프레임버퍼높이/240 이다).
+            .ignoresSafeArea()
 
             if !isBooting {
                 GameControlsView(
@@ -114,10 +112,37 @@ struct GameView: View {
         .statusBarHidden(settings.fullscreen)
         .lockOrientation(.landscape)
         .persistentSystemOverlays(.hidden)
-        // ⚠️ 인게임에서는 화면 가장자리 스와이프가 인벤토리·시점 조작과 섞인다.
-        //    시스템 제스처를 한 번 미뤄서(두 번 쓸어야 홈으로 나감) 오작동을 막는다.
-        //    유튜브 전체화면과 같은 방식이다.
-        .defersSystemGestures(on: .all)
+        // ⚠️ **비워서 명시**해야 한다. 모디파이어를 빼면 SwiftUI 기본값이 남는데,
+        //    실측해 보니 `UIHostingController` 는 기본으로 좌·우 가장자리를 지연한다:
+        //      [FlameHome] …(autoHide=true edges=0xa …) → PresentationHostingController(edges=0xa)
+        //                                        0xa = left|right
+        //    가장자리를 하나라도 지연하면 iOS 는 "여기는 한 번 더 쓸어야 나갑니다" 를
+        //    알리려고 홈 인디케이터를 계속 띄워 두고, 그러면 바로 위의
+        //    `.persistentSystemOverlays(.hidden)` 이 무력화된다.
+        //
+        //    지연을 버려도 원래 목적은 남는다 — 인디케이터가 숨겨져 있으면 iOS 는 먼저
+        //    한 번 쓸어야 인디케이터를 띄우므로 바닥에서 시작하는 드래그는 어차피 보호된다.
+        //
+        //    ⚠️ `prefersHomeIndicatorAutoHidden` 은 "요청" 일 뿐이고 표시/숨김 시점은
+        //       iOS 가 정한다 — 만지면 띄우고 가만히 두면 몇 초 뒤 내린다. 그 지연 시간을
+        //       바꾸는 공개 API 는 없다(완전히 없애려면 사용자가 '안내 접근'을 켜야 한다).
+        //       실측으로 확인한 최종 상태: `autoHide=true edges=0x0`.
+        //
+        // ⚠️ 바닥 지연은 **화면이 열려 있을 때만** 건다.
+        //
+        //    지연과 자동 숨김은 서로 배타적이다 — 가장자리를 하나라도 지연하면 iOS 가
+        //    "한 번 더 쓸어야 나갑니다" 안내로 인디케이터를 계속 띄운다.
+        //    Amethyst 는 이걸 사용자 토글로 넘겼다("This will disable home indicator
+        //    locking. You will need to use Guided Access to [have both]").
+        //
+        //    하지만 바닥 보호가 **실제로 필요한 건 인벤토리·상자가 열려 있을 때뿐**이다.
+        //    맨 아랫줄 아이템을 끌어 옮기는 동작이 홈 제스처와 겹치는 그 경우다.
+        //    평소 플레이(시점·이동)에서는 바닥 드래그가 아이템 드래그가 아니라 지킬 게 없다.
+        //    마우스가 잡혀 있으면(`isGrabbing`) 화면이 안 열린 것이므로 그때만 푼다.
+        //
+        //    상태 기반이라 깜빡이지 않는다 — 예전에 타이머로 껐다 켰다 했을 때가
+        //    깜빡임의 원인이었다. `isGrabbing` 은 화면을 열고 닫을 때만 바뀐다.
+        .defersSystemGestures(on: isGrabbing ? [] : .bottom)
         // 게임 안의 "게임 종료" 는 System.exit → C exit() 로 내려온다.
         // 네이티브가 그걸 가로채 앱을 끝내지 않고 이 알림만 보낸다.
         .onReceive(NotificationCenter.default.publisher(for: .FlameGameDidExit)) { _ in
@@ -126,7 +151,6 @@ struct GameView: View {
         .sheet(isPresented: $showMenu) {
             InGameMenuView(
                 onDumpThreads: { runtime.dumpThreads() },
-                hotbarScale: $hotbarScale,
                 resolutionPercent: $settings.resolutionScalePercent,
                 onQuit: { quitGame() }
             )
@@ -138,10 +162,6 @@ struct GameView: View {
         .onChange(of: settings.resolutionScalePercent) { _, _ in
             // 인게임에서 바꾼 값도 다음 실행까지 남긴다.
             JvmSettingsStore.save(settings)
-        }
-        .onChange(of: hotbarScale) { _, value in
-            appSettings.hotbarTouchScale = value
-            AppSettingsStore.save(appSettings)
         }
         .onAppear(perform: startGamepad)
         .onDisappear(perform: teardown)

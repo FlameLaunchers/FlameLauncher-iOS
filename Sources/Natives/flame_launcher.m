@@ -12,6 +12,7 @@
 #import <QuartzCore/QuartzCore.h>
 #import <mach/mach.h>
 
+#include <mach/mach.h>
 #include <dlfcn.h>
 #include <setjmp.h>
 #include <signal.h>
@@ -232,6 +233,98 @@ static void flame_dumpJavaStacks(void) {
 ///
 /// 이게 없으면 jetsam 으로 죽었을 때 "로그가 그냥 끊겼다" 외에 아무 단서가 없다.
 /// 마지막 줄의 여유를 보면 한도에 부딪힌 것인지, 아니면 다른 이유인지 바로 갈린다.
+/// 힙 밖 메모리가 **어디에** 있는지 태그별로 모아 찍는다.
+///
+/// ⚠️ `[FlameMem]` 의 총량만으로는 아무것도 못 고친다. 실측(바닐라 1.21.4 + 서버
+///    리소스팩)에서 죽는 순간이 전체 3069 MB = 자바 힙 커밋 928 MB + **힙 밖 2141 MB**
+///    였는데, 8192² 아틀라스는 그중 256 MB(12%)에 불과했다. 아틀라스를 줄여 화질만
+///    잃고 메모리는 그대로였다. 나머지 1.9 GB 가 무엇인지 모르면 계속 헛짚는다.
+///
+///    jetsam 이 보는 건 phys_footprint 이고, 그건 결국 각 VM 영역의 **더티 페이지**
+///    합이다. 그래서 주소 공간을 훑어 user_tag 별로 더해 본다. malloc 이 크면 JVM/
+///    NativeImage 쪽, IOKit·IOAccelerator 가 크면 GPU 쪽이다.
+static void flame_dumpMemoryRegions(void) {
+    static const struct { unsigned tag; const char *name; } known[] = {
+        {  1, "malloc" },      {  2, "malloc_small" }, {  3, "malloc_large" },
+        {  4, "malloc_huge" }, {  7, "malloc_tiny" },  { 11, "malloc_nano" },
+        { 21, "IOKit" },       { 30, "stack" },        { 33, "dylib" },
+        { 44, "java" },        { 57, "IOSurface" },    { 63, "accelerate" },
+    };
+
+    typedef struct { unsigned tag; uint64_t dirty; } Bucket;
+    Bucket buckets[128] = {0};
+    int count = 0;
+    uint64_t total = 0;
+
+    // ⚠️ `mach_vm_*` 는 iOS SDK 에서 막혀 있다(mach_vm.h: "unsupported").
+    //    64비트 정보를 주는 `vm_region_recurse_64` 는 쓸 수 있다.
+    vm_address_t address = 0;
+    // ⚠️ `depth` 는 루프 **밖**에 있어야 한다. 안에 두고 매번 0 으로 되돌리면,
+    //    서브맵(공유 캐시)을 만나는 순간 같은 주소를 끝없이 재조회하다 가드에 걸려
+    //    멈춘다 — 그 뒤 영역(JVM 힙·GL 버퍼)은 통째로 못 본다.
+    //    실제로 그래서 2835 MB 중 938 MB 만 보였다.
+    natural_t depth = 0;
+    for (int guard = 0; guard < 200000; guard++) {
+        vm_size_t size = 0;
+        vm_region_submap_info_data_64_t info;
+        mach_msg_type_number_t infoCount = VM_REGION_SUBMAP_INFO_COUNT_64;
+        kern_return_t kr = vm_region_recurse_64(mach_task_self(), &address, &size,
+                                                &depth, (vm_region_recurse_info_64_t)&info,
+                                                &infoCount);
+        if (kr != KERN_SUCCESS) break;
+        if (info.is_submap) { depth++; continue; }   // 같은 주소에서 한 단계 내려간다
+
+        // 더티 + 스왑(압축)만 센다. 클린 상주는 파일 기반이라 언제든 버려져서
+        // jetsam 이 보는 phys_footprint 에 들어가지 않는다.
+        uint64_t dirty = (uint64_t)(info.pages_dirtied + info.pages_swapped_out) * PAGE_SIZE;
+        if (dirty > 0) {
+            total += dirty;
+            int slot = -1;
+            for (int i = 0; i < count; i++) if (buckets[i].tag == info.user_tag) { slot = i; break; }
+            if (slot < 0 && count < (int)(sizeof(buckets) / sizeof(buckets[0]))) {
+                slot = count++;
+                buckets[slot].tag = info.user_tag;
+            }
+            if (slot >= 0) buckets[slot].dirty += dirty;
+        }
+        address += size;
+    }
+
+    // 큰 것부터 여덟 개만. 나머지는 봐야 의미가 없다.
+    for (int i = 0; i < count; i++) {
+        for (int j = i + 1; j < count; j++) {
+            if (buckets[j].dirty > buckets[i].dirty) {
+                Bucket t = buckets[i]; buckets[i] = buckets[j]; buckets[j] = t;
+            }
+        }
+    }
+    // ⚠️ 태그별 합계는 어디까지나 우리가 훑어 더한 값이다. jetsam 이 실제로 보는 건
+    //    phys_footprint 이고, 커널이 그 내역을 직접 준다. 둘을 나란히 찍어 두면
+    //    "우리가 못 본 부분"이 얼마인지 바로 드러난다.
+    task_vm_info_data_t vmInfo;
+    mach_msg_type_number_t vmCount = TASK_VM_INFO_COUNT;
+    if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&vmInfo, &vmCount) == KERN_SUCCESS) {
+        printf("[FlameVM] footprint %llu MB = 익명 %llu + 압축 %llu · "
+               "파일기반 %llu · 재사용가능 %llu · 폐기가능 %llu\n",
+               (unsigned long long)(vmInfo.phys_footprint >> 20),
+               (unsigned long long)(vmInfo.internal >> 20),
+               (unsigned long long)(vmInfo.compressed >> 20),
+               (unsigned long long)(vmInfo.external >> 20),
+               (unsigned long long)(vmInfo.reusable >> 20),
+               (unsigned long long)(vmInfo.purgeable_volatile_resident >> 20));
+    }
+    printf("[FlameVM] 훑어서 더한 값 %llu MB — 태그별 상위:\n", total >> 20);
+    for (int i = 0; i < count && i < 8; i++) {
+        const char *name = NULL;
+        for (size_t k = 0; k < sizeof(known) / sizeof(known[0]); k++) {
+            if (known[k].tag == buckets[i].tag) { name = known[k].name; break; }
+        }
+        printf("[FlameVM]   %-14s (tag %3u) %5llu MB\n",
+               name ? name : "?", buckets[i].tag, buckets[i].dirty >> 20);
+    }
+    fflush(stdout);
+}
+
 static void flame_startMemoryWatch(void) {
     static BOOL started = NO;
     if (started) return;
@@ -247,8 +340,26 @@ static void flame_startMemoryWatch(void) {
             int available = FlameNativeAvailableMemoryMB();
             int used = FlameNativeMemoryFootprintMB();
             if (available >= 0 && available < lowest) lowest = available;
-            printf("[FlameMem] 사용 %d MB · 남은 여유 %d MB (최저 %d MB)\n",
-                   used, available, lowest == INT_MAX ? -1 : lowest);
+
+            // 위험 구간에 들어오면 몇 번만 태그별 내역을 남긴다. 죽고 나면 못 본다.
+            static int vmDumpsLeft = 3;
+            if (vmDumpsLeft > 0 && available >= 0 && available < 400) {
+                vmDumpsLeft--;
+                flame_dumpMemoryRegions();
+            }
+
+            // ⚠️ 여기서 `malloc_zone_pressure_relief` 를 불러 봤지만 **아무것도 안 돌아왔다**
+            //    (malloc_small 782 MB → 781 MB). 즉 그 782 MB 는 해제됐는데 malloc 이
+            //    쥐고 있는 게 아니라 **살아 있는 할당**이다.
+            //    정체: 마인크래프트는 스티칭이 끝나도 스프라이트마다 원본 NativeImage 를
+            //    `SpriteContents` 안에 계속 들고 있다(애니메이션·getPixels 때문). 서버
+            //    리소스팩의 텍스처 수천 장이 각 16~64 KB 로 malloc_small 에 남는 것이다.
+            //    프로세스 안에서 줄일 방법이 없다 — 팩을 안 받는 것 말고는.
+            // 파일 기반으로 빼돌린 양을 같이 찍는다 — 할당자가 실제로 얼마나
+            // 일하고 있는지는 이 숫자로만 알 수 있다(footprint 에는 안 잡히므로).
+            printf("[FlameMem] 사용 %d MB · 남은 여유 %d MB (최저 %d MB) · 파일매핑 %llu MB\n",
+                   used, available, lowest == INT_MAX ? -1 : lowest,
+                   (unsigned long long)(flame_alloc_mapped_bytes() >> 20));
             fflush(stdout);
 
             // ⚠️ 예전 조건은 "첫 프레임이 아직 없을 때" 였는데, 마인크래프트는 로딩 화면을

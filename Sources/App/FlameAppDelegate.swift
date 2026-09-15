@@ -34,6 +34,9 @@ final class FlameAppDelegate: UIResponder, UIApplicationDelegate {
         window.rootViewController = host
         window.makeKeyAndVisible()
         self.window = window
+        // ⚠️ 이 시점의 UIScreen.main.bounds 는 아직 세로일 수 있다. 씬에 붙여 기하를
+        //    따라가게 한다 — 안 그러면 세로 프레임이 그대로 굳는다(OrientationLock 참고).
+        OrientationLock.attachToScene(window)
 
         Task { @MainActor in
             await AuthStore.shared.restore()
@@ -57,21 +60,32 @@ final class FlameAppDelegate: UIResponder, UIApplicationDelegate {
     ///    "중간중간 세로로 돌아간다"가 이것이다. 활성화될 때마다 한 번 더 요청해 창을 없앤다.
     func applicationDidBecomeActive(_ application: UIApplication) {
         OrientationLock.reassert()
+        // 창이 씬 기하를 놓쳤으면 여기서 되돌린다. 씬은 앱이 백그라운드를
+        // 다녀올 때 갱신되는데, 씬에 안 붙은 창은 그걸 따라가지 못한다.
+        OrientationLock.attachToScene(window)
     }
 }
 
 
-/// 시스템 제스처를 최대한 미루는 호스팅 컨트롤러.
+/// 홈 인디케이터를 숨기는 호스팅 컨트롤러.
 ///
-/// 인게임에서 화면 가장자리를 쓸면 홈으로 나가버려 인벤토리 드래그와 섞인다.
-/// `preferredScreenEdgesDeferringSystemGestures` 를 켜두면 **한 번 쓸어서는**
-/// 홈 제스처가 발동하지 않는다(인디케이터만 뜨고, 한 번 더 쓸어야 나간다).
-/// 유튜브 전체화면이 쓰는 것과 같은 방식이고, 앱이 할 수 있는 최대치다 —
-/// 홈 제스처를 완전히 막는 공개 API 는 없다(그건 '안내 접근'의 영역이다).
-///
-/// SwiftUI 의 `.defersSystemGestures` 만으로는 커스텀 호스팅 구조에서 전달이
-/// 불안정해서, UIKit 층에서도 직접 선언한다.
+/// 인디케이터가 숨겨져 있으면 iOS 는 **먼저 한 번 쓸어야 인디케이터를 띄운다** —
+/// 즉 바닥에서 시작하는 드래그(인벤토리 맨 아랫줄)가 한 단계 보호된다.
+/// 예전에는 같은 목적으로 `preferredScreenEdgesDeferringSystemGestures` 를 켰는데,
+/// 그건 인디케이터를 **계속 띄워 두는** 설정이라 오히려 역효과였다.
 final class FlameHostingController<Content: View>: UIHostingController<Content> {
-    override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { .all }
+    // ⚠️ 가장자리 제스처 지연(`preferredScreenEdgesDeferringSystemGestures`)은 **걸지
+    //    않는다**. 걸어 두면 iOS 가 "여기는 한 번 더 쓸어야 나갑니다" 를 알리려고 홈
+    //    인디케이터를 계속 띄워 두기 때문에, 자동 숨김이 아예 오지 않는다 —
+    //    `prefersHomeIndicatorAutoHidden` 과 정면으로 싸우는 설정이다.
+    //    (SwiftUI 상속값이 0xa = left|right 라 아래에서 비운다. 자세한 사정은 GameView)
     override var prefersHomeIndicatorAutoHidden: Bool { true }
+
+    // ⚠️ 상속하면 `.left | .right`(0xa) 가 나온다 — SwiftUI 기본값이다.
+    //    하나라도 지연하면 인디케이터가 안 사라지므로 비운다(GameView 주석 참고).
+    override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { [] }
+
+    // 자식(SwiftUI 콘텐츠)에게 위임되면 위 값들이 무시된다. 우리가 답한다.
+    override var childForHomeIndicatorAutoHidden: UIViewController? { nil }
+    override var childForScreenEdgesDeferringSystemGestures: UIViewController? { nil }
 }

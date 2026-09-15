@@ -34,14 +34,7 @@ final class LauncherModel {
     ///    예전에는 그냥 아무 일도 일어나지 않아서, 눌러도 반응이 없는 것처럼 보였다.
     private(set) var bootedInstanceId: String?
 
-    /// 다른 인스턴스를 실행하려다 막혔을 때 띄우는 재시작 안내.
-    var restartRequest: RestartRequest?
 
-    struct RestartRequest: Identifiable {
-        let id = UUID()
-        let target: InstanceMeta
-        let booted: String
-    }
 
     // MARK: - 재시작을 건너뛰고 이어서 실행하기
 
@@ -78,6 +71,30 @@ final class LauncherModel {
         return id
     }
 
+    /// 다른 버전으로 넘어간다 — 예약해 두고, 디버거 도구를 거쳐 새 프로세스로 다시 뜬다.
+    ///
+    /// 자바 가상머신은 프로세스당 한 번만 뜨므로 버전을 바꾸려면 프로세스가 새로 떠야 하고,
+    /// JIT 는 프로세스 속성이라 그 새 프로세스에는 디버거를 다시 붙여야 한다. 둘 다 피할 수
+    /// 없다면 **손으로 하지 않게** 만드는 것이 남는 일이다.
+    ///
+    /// 예전에는 "앱을 완전히 종료했다 다시 여세요" 안내를 띄우고 끝이었다. 사용자는
+    /// 앱을 죽이고, 아이콘을 찾아 누르고, JIT 도구를 거치고, 버전을 다시 찾아 눌러야 했다.
+    /// 이제 그 네 단계를 한 번의 확인으로 대신한다.
+    func switchTo(_ meta: InstanceMeta) {
+        Self.notePendingLaunch(meta.id)
+        // 요청이 실제로 나갔을 때만 종료한다. 도구가 없는데 앱만 죽으면
+        // 사용자는 아무 설명 없이 앱이 사라지는 것만 겪는다.
+        guard FlameNativeRequestDebuggerJITForRelaunch() else {
+            alert = AlertMessage(
+                title: "앱을 다시 열어주세요",
+                message: "\(meta.name) 로 준비해 뒀습니다. 앱을 완전히 종료했다 다시 열면 바로 이어집니다."
+            )
+            return
+        }
+        // URL 전달과 화면 전환이 끝날 틈을 준다. 곧바로 exit 하면 요청이 유실된다.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { exit(0) }
+    }
+
     /// 앱이 뜬 뒤 한 번 부른다. 재시작 직전에 고른 인스턴스가 있으면 그대로 이어서 실행한다.
     func resumePendingLaunchIfNeeded() {
         guard runningInstance == nil, bootedInstanceId == nil,
@@ -91,14 +108,28 @@ final class LauncherModel {
     /// 게임 화면이 JVM 을 실제로 띄울 때 알려준다.
     func noteJVMBooted(_ meta: InstanceMeta) {
         if bootedInstanceId == nil { bootedInstanceId = meta.id }
+        // 방금 돌린 버전이 목록 맨 위로 오게 기록한다. 게임에서 나왔을 때
+        // 한가운데서 다시 찾지 않아도 된다.
+        InstanceStore.shared.notePlayed(meta)
     }
 
     var instances: [InstanceMeta] { InstanceStore.shared.instances }
 
+    /// 화면에 띄울 알림.
+    ///
+    /// ⚠️ 알림은 **이 하나로만** 띄운다. 예전에는 재시작 안내를 별도 `.alert` 로 달았는데,
+    ///    SwiftUI 는 한 뷰에 여러 `.alert` 를 붙이면 나중 것이 앞의 것을 덮어서
+    ///    **앞의 알림이 영영 안 뜬다.** 배경 앵커(Color.clear)로 피해 보려 했지만
+    ///    그것도 안 떴다. 채널을 하나로 두면 이 문제 자체가 생기지 않는다.
     struct AlertMessage: Identifiable {
         let id = UUID()
         var title: String
         var message: String
+        /// 있으면 확인 버튼이 이 이름으로 바뀌고, 눌렀을 때 이걸 실행한다.
+        var confirmTitle: String?
+        var confirm: (() -> Void)?
+        /// 물러날 수 있어야 하는가(취소 버튼).
+        var cancellable: Bool = false
     }
 
     /// 버전 목록을 가져오지 못한 이유(있으면). 목록이 빈 채로 두지 않고 화면에 보여준다.
@@ -180,7 +211,17 @@ final class LauncherModel {
         // 이미 다른 인스턴스로 JVM 을 띄운 프로세스라면 여기서 막고 재시작을 안내한다.
         if let booted = bootedInstanceId, booted != meta.id {
             let name = InstanceStore.shared.instances.first { $0.id == booted }?.name ?? booted
-            restartRequest = RestartRequest(target: meta, booted: name)
+            print("[Flame] 버전 전환 필요: \(name) -> \(meta.name)")
+            let body = "이번 실행에서는 \(name) 을(를) 이미 띄웠습니다. "
+                + "자바 가상머신은 앱 실행당 한 번만 뜰 수 있어서 앱이 새로 떠야 합니다.\n\n"
+                + "전환을 누르면 JIT 도구를 거쳐 알아서 다시 뜨고, \(meta.name) 가 바로 실행됩니다."
+            alert = AlertMessage(
+                title: "\(meta.name) 로 전환할까요?",
+                message: body,
+                confirmTitle: "전환",
+                confirm: { [weak self] in self?.switchTo(meta) },
+                cancellable: true
+            )
             return
         }
         launchingInstance = meta

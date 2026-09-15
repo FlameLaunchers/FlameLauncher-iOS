@@ -13,7 +13,6 @@ struct GameSurface: UIViewRepresentable {
     let settings: JvmSettings
     let renderer: Renderer
     @Binding var guiScale: Int
-    @Binding var hotbarScale: Int
     /// 서피스 크기가 정해지면(첫 레이아웃) 알려준다 — 여기서 JVM 부팅을 시작한다.
     let onReady: (CALayer, CGSize) -> Void
     /// 만들어진 뷰 자체를 넘긴다. 전투 모드 전환과 게임패드 시점 이동이
@@ -50,7 +49,6 @@ struct GameSurface: UIViewRepresentable {
 
     func updateUIView(_ view: MinecraftSurfaceView, context: Context) {
         view.guiScale = guiScale
-        view.hotbarScaleOverride = hotbarScale
         view.sensitivity = settings.mouseSensitivity
         view.applyResolutionScale(settings.resolutionScale)
     }
@@ -69,7 +67,6 @@ class MinecraftSurfaceView: UIView {
     var sensitivity: Double = 1.5
     var resolutionScale: Double = 1
     var guiScale = 0
-    var hotbarScaleOverride = 0
     /// 전투 모드: 길게 누르면 좌클릭(채굴) 대신 우클릭(사용/공격)을 보낸다.
     var combatMode = false
 
@@ -137,6 +134,10 @@ class MinecraftSurfaceView: UIView {
         configureLayer(scale: scale)
 
         runtime.setScreenSize(Int(drawableSize.width), Int(drawableSize.height))
+        // 설정 화면이 "이 배율이면 HUD 가 몇 배" 를 정확히 보여주려면 게임이 실제로
+        // 쓰는 높이가 필요하다(안전영역 때문에 화면 크기와 다르다). 여기가 유일하게
+        // 그 값을 아는 지점이다.
+        JvmSettings.lastFullFramebufferHeight = Int(bounds.height * UIScreen.main.nativeScale)
         cursor = CGPoint(x: bounds.midX, y: bounds.midY)
 
         // ⚠️ 회전이 **끝난 뒤** 크기로만 JVM 을 띄운다.
@@ -167,21 +168,21 @@ class MinecraftSurfaceView: UIView {
 
     // MARK: - 핫바
 
-    /// 현재 화면 기준 핫바의 사각형. ZL2 와 같은 규칙:
-    /// slotSize = guiScale*20, 핫바 너비 = slotSize*9, 화면 하단 중앙.
+    /// 현재 화면 기준 핫바의 사각형. 마인크래프트와 같은 규칙:
+    /// slotSize = guiScale*20(GUI 단위), 핫바 너비 = slotSize*9, 화면 하단 중앙.
     ///
-    /// 스케일 우선순위: 사용자 오버라이드(1~4) → options.txt 의 guiScale → 해상도 기반 auto.
+    /// ⚠️ 예전에는 이 안에서 스케일을 어림했는데 **단위를 틀렸다** — 뷰 좌표(pt)를
+    ///    320x240 으로 나눴지만 마인크래프트는 **프레임버퍼 px** 로 나눈다.
+    ///    아이폰 15 에서 `min(852/320, 373/240) = 1` 이 나와 실제 스케일 2 의 절반짜리
+    ///    영역이 됐고, 그래서 "핫바 터치 영역 크기" 수동 설정이 따로 있어야 했다.
+    ///    이제 `guiScale` 은 런처가 계산해 넘기는 **실제 값**이고, 여기서는 좌표만 옮긴다.
     func hotbarRect() -> CGRect? {
         let w = bounds.width, h = bounds.height
-        guard w > 0, h > 0 else { return nil }
+        guard w > 0, h > 0, guiScale > 0, drawableSize.height > 0 else { return nil }
 
-        let auto = max(1, Int(min(w / 320, h / 240)))
-        let scale: Int
-        if (1...4).contains(hotbarScaleOverride) { scale = hotbarScaleOverride }
-        else if (1...auto).contains(guiScale) { scale = guiScale }
-        else { scale = auto }
-
-        let slot = CGFloat(scale) * 20
+        // 프레임버퍼 px → 뷰 pt. 해상도 배율이 100% 미만이면 둘이 다르다.
+        let toPoints = h / drawableSize.height
+        let slot = CGFloat(guiScale * 20) * toPoints
         let total = slot * 9
         guard total > 0, total <= w else { return nil }
         return CGRect(x: (w - total) / 2, y: h - slot, width: total, height: slot)

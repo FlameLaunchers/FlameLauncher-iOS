@@ -930,4 +930,126 @@ final class FlameLauncherTests: XCTestCase {
 
     private func le16(_ v: UInt16) -> Data { withUnsafeBytes(of: v.littleEndian) { Data($0) } }
     private func le32(_ v: UInt32) -> Data { withUnsafeBytes(of: v.littleEndian) { Data($0) } }
+
+    // MARK: - HUD 크기 (해상도 배율과의 톱니 관계)
+
+    /// 우리 공식이 마인크래프트 `Window.calculateScale` 의 루프와 같은 답을 내는지 본다.
+    /// 이게 어긋나면 설정 화면의 "HUD %" 가 거짓말을 하고, 사용자는 인벤토리를 키우려다
+    /// 오히려 줄이는 배율을 고르게 된다.
+    func testGuiScaleMatchesMinecraftLoop() {
+        /// 마인크래프트 1.21.1 원문 그대로.
+        func minecraftScale(_ fbW: Int, _ fbH: Int, guiScale: Int) -> Int {
+            var i = 1
+            while i != guiScale && i < fbW && i < fbH
+                    && fbW / (i + 1) >= 320 && fbH / (i + 1) >= 240 {
+                i += 1
+            }
+            return i
+        }
+
+        // 아이폰 15 가로 실측(100% 프레임버퍼 2556x1118)
+        let fullW = 2556, fullH = 1118
+        for percent in stride(from: JvmSettings.resScaleMin, through: JvmSettings.resScaleMax, by: 5) {
+            let w = fullW * percent / 100, h = fullH * percent / 100
+            XCTAssertEqual(
+                JvmSettings.guiScale(fullHeightPx: fullH, percent: percent),
+                minecraftScale(w, h, guiScale: 4),
+                "배율 \(percent)% (\(w)x\(h))"
+            )
+        }
+    }
+
+    /// 톱니가 실제로 톱니인지 — 배율을 올렸는데 HUD 가 작아지는 구간이 있어야 한다.
+    /// (없다면 라벨을 붙일 이유도 없으므로 이 테스트가 기능의 존재 이유다)
+    func testHudSizeIsNotMonotonicInResolution() {
+        let fullH = 1118
+        func hud(_ p: Int) -> Double { JvmSettings.hudRelativeSize(fullHeightPx: fullH, percent: p) }
+
+        XCTAssertGreaterThan(hud(45), hud(55), "45% 가 55% 보다 HUD 가 커야 한다")
+        XCTAssertGreaterThan(hud(65), hud(55))
+        XCTAssertLessThan(hud(100), hud(65), "네이티브가 오히려 65% 보다 작다")
+    }
+
+
+    /// HUD 를 키우되 **화면 밖으로 밀어내지 않는다**는 보장. 이게 깨지면 인벤토리는
+    /// 커졌는데 대형 상자를 못 쓰게 된다 — 사용자 입장에서는 그냥 고장이다.
+    func testHudClampNeverClipsAndFloorGrantsExactly() {
+        /// 마인크래프트 Window.calculateScale — 하한만 우리가 넘긴 값으로.
+        func mcScale(_ w: Int, _ h: Int, guiScale: Int, floorW: Int, floorH: Int) -> Int {
+            var i = 1
+            while i != guiScale && i < w && i < h
+                    && w / (i + 1) >= floorW && h / (i + 1) >= floorH { i += 1 }
+            return i
+        }
+
+        let fullW = 2556, fullH = 1179      // 아이폰 15 가로 (SafeArea 없이)
+        for percent in stride(from: JvmSettings.resScaleMin,
+                              through: JvmSettings.resScaleMax, by: 5) {
+            let w = fullW * percent / 100, h = fullH * percent / 100
+            for want in 1...4 {
+                let eff = JvmSettings.effectiveHudScale(want, framebufferHeight: h)
+
+                XCTAssertTrue(h / eff >= JvmSettings.tallestGuiHeight || eff == 1,
+                              "\(percent)% \(want)배: 가상 높이 \(h / eff) 로 잘린다")
+
+                var floorW = 320, floorH = 240
+                if let spec = JvmSettings.guiFloorSpec(hudScale: want, framebuffer: (w, h)) {
+                    let parts = spec.split(separator: "x").compactMap { Int($0) }
+                    (floorW, floorH) = (parts[0], parts[1])
+                }
+                XCTAssertEqual(mcScale(w, h, guiScale: eff, floorW: floorW, floorH: floorH),
+                               eff, "\(percent)% \(want)배: 하한이 그 스케일을 못 내준다")
+            }
+        }
+    }
+
+    /// 잠긴 단계에 안내하는 해상도가 실제로 그 단계를 열어야 한다.
+    /// (틀리면 사용자가 시키는 대로 해도 아무 일이 안 일어난다)
+    func testAdvertisedResolutionActuallyUnlocksHudScale() {
+        let fullH = 1179
+        for scale in 2...4 {
+            guard let need = JvmSettings.minResolutionPercent(forHudScale: scale,
+                                                              fullHeightPx: fullH) else { continue }
+            let h = fullH * need / 100
+            XCTAssertGreaterThanOrEqual(JvmSettings.maxHudScale(framebufferHeight: h), scale,
+                                        "\(scale)배: \(need)% 로 올려도 안 열린다")
+        }
+    }
+
+
+
+
+
+
+    /// **옛 instance.json 이 계속 읽혀야 한다.**
+    ///
+    /// ⚠️ Swift 가 합성하는 `Decodable` 은 프로퍼티 기본값을 쓰지 않는다 — 비옵셔널
+    ///    필드는 키가 없으면 `keyNotFound` 로 던진다. 그래서 `InstanceMeta` 에
+    ///    비옵셔널 필드를 새로 추가하면 **이미 저장된 인스턴스가 전부 디코딩에 실패**하고,
+    ///    `InstanceStore.reload()` 의 `compactMap` 이 조용히 걸러내 목록에서 사라진다.
+    ///    실제로 `memoryPressureTier: Int = 0` 을 넣었다가 이렇게 깨뜨렸다.
+    ///    새 필드는 옵셔널로 넣고 읽을 때 기본값을 씌운다.
+    ///
+    ///    아래 JSON 은 실제 기기에서 뽑은 것이다(1.21.4 바닐라).
+    func testLegacyInstanceJsonStillDecodes() throws {
+        let legacy = """
+        {"assetIndexId":"17","extraJars":[],"gameArgs":[],"gameJvmArgs":[],
+         "iconEmoji":"🌿","id":"vanilla_1.21.4_25d9d9a0","lastPlayedAt":779200000,
+         "mainClass":"net.minecraft.client.main.Main","mcVersion":"1.21.4",
+         "name":"1.21.4","type":"VANILLA"}
+        """
+        let meta = try JSONDecoder().decode(InstanceMeta.self, from: Data(legacy.utf8))
+        XCTAssertEqual(meta.id, "vanilla_1.21.4_25d9d9a0")
+        XCTAssertEqual(meta.mcVersion, "1.21.4")
+        XCTAssertNil(meta.rendererId, "없는 선택값은 nil 로 읽혀야 한다")
+
+        // 안드로이드가 쓴 파일에는 iOS 전용 필드가 아예 없다 — 그것도 읽혀야 한다.
+        let android = """
+        {"id":"x","name":"x","type":"VANILLA","mcVersion":"1.21.1","assetIndexId":"17",
+         "extraJars":[],"gameArgs":[],"gameJvmArgs":[],"iconEmoji":"🌿",
+         "mainClass":"net.minecraft.client.main.Main"}
+        """
+        XCTAssertNoThrow(try JSONDecoder().decode(InstanceMeta.self, from: Data(android.utf8)))
+    }
+
 }

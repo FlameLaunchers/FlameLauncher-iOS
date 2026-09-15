@@ -17,6 +17,17 @@ struct InstanceSettingsView: View {
     /// 렌더 해상도(%). 전역 JVM 설정과 같은 값이다.
     @State private var resScale = JvmSettingsStore.load().resolutionScalePercent
 
+    /// 이 배율의 HUD 크기를 **이 화면에서 가능한 최대 대비 %** 로 나타낸 값.
+    /// (자세한 이유는 JvmSettings.guiScale 주석 참고 — 배율과 비례하지 않는다)
+    private var hudPercent: Int {
+        let full = JvmSettings.lastFullFramebufferHeight
+        let now = JvmSettings.hudRelativeSize(fullHeightPx: full, percent: resScale)
+        let best = (JvmSettings.resScaleMin...JvmSettings.resScaleMax)
+            .map { JvmSettings.hudRelativeSize(fullHeightPx: full, percent: $0) }
+            .max() ?? now
+        return Int((now / best * 100).rounded())
+    }
+
     struct ModFile: Identifiable, Hashable {
         let url: URL
         var id: String { url.lastPathComponent }
@@ -137,7 +148,9 @@ struct InstanceSettingsView: View {
     /// 두 곳에 뒀지만 값은 하나였다. 여기서 바꾸면 JVM 설정에도 그대로 반영된다.
     private var resolutionSection: some View {
         card(title: "🔍 렌더 해상도",
-             note: "낮출수록 프레임버퍼가 작아져 FPS가 오르고 화면은 약간 흐려집니다.") {
+             note: "낮출수록 FPS가 오르고 화면은 약간 흐려집니다. HUD 크기는 배율에 "
+                 + "비례하지 않으니(마인크래프트가 가상 화면을 최소 320x240 으로 잡습니다) "
+                 + "HUD 수치가 가장 큰 배율을 고르세요.") {
             HStack(spacing: 10) {
                 Slider(
                     value: Binding(get: { Double(resScale) }, set: { resScale = Int($0) }),
@@ -146,12 +159,18 @@ struct InstanceSettingsView: View {
                 )
                 .tint(FlameColor.primary)
 
-                Text(resScale >= 100 ? "네이티브" : "\(resScale)%")
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
-                    .foregroundStyle(FlameColor.primary)
-                    .frame(width: 62, alignment: .trailing)
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(resScale >= 100 ? "네이티브" : "\(resScale)%")
+                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                        .foregroundStyle(FlameColor.primary)
+                    Text("HUD \(hudPercent)%")
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(FlameColor.textSub)
+                }
+                .frame(width: 66, alignment: .trailing)
             }
         }
+        // 이 화면은 전역 설정과 같은 값을 만지므로 계산도 같게 한다.
         // 저장 버튼이 없는 화면이라 움직이는 즉시 반영한다.
         .onChange(of: resScale) { _, percent in
             var settings = JvmSettingsStore.load()

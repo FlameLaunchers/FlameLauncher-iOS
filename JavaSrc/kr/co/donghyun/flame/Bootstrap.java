@@ -1,7 +1,6 @@
 package kr.co.donghyun.flame;
 
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -22,17 +21,19 @@ public final class Bootstrap {
         String plan = System.getProperty("flame.forge.plan");
         if (plan != null && !plan.isEmpty()) {
             Path path = Paths.get(plan);
-            // ⚠️ 프로세서는 **한 번만** 돌린다. 산출물(SRG 매핑·패치된 클라이언트 JAR)은
-            //    디스크에 남으므로 다시 만들 이유가 없다. 예전에는 실행할 때마다 6개를
-            //    전부 다시 돌려서 매번 수십 초와 1.6GB 를 쓰고, 그 도중에 프로세스가
-            //    통째로 사라지는 일이 반복됐다(자바 예외도 크래시 리포트도 안 남는다).
-            //    계획 파일 자체는 지우면 안 된다 — 실행할 때마다 클래스패스를 만들 때
-            //    설치 전용 라이브러리와 산출물 목록을 여기서 읽는다.
-            Path done = path.resolveSibling("forge_plan.done");
-            if (Files.exists(path) && !Files.exists(done)) {
+            // 프로세서는 산출물(SRG 매핑·패치된 클라이언트 JAR)이 이미 있으면 건너뛴다.
+            // 그 판단은 ForgeInstaller.outputsExist 가 **단계별로** 한다 — 전부 있으면
+            // 계획을 훑기만 하고 끝나므로 매번 불러도 싸다.
+            //
+            // ⚠️ 예전에는 그 위에 forge_plan.done 이라는 표시 파일을 두고, 있으면
+            //    ForgeInstaller 를 아예 부르지 않았다. 그런데 프로세서가 산출물을 못 만든
+            //    채로 정상 반환하면(예: 클래스패스에서 gson 이 빠져 처리 단계가 조용히
+            //    아무것도 못 한 경우) 표시만 남고 산출물은 없는 상태로 굳는다.
+            //    그러면 게임이 영원히 이렇게 죽고, 재설치 말고는 복구가 안 된다:
+            //      IllegalStateException: Could not find net/minecraft/client/Minecraft.class
+            //    표시 파일은 "무엇이 끝났는가"를 모르고, 산출물은 안다. 산출물만 믿는다.
+            if (Files.exists(path)) {
                 ForgeInstaller.run(path);
-                Files.write(done, String.valueOf(Files.getLastModifiedTime(path).toMillis())
-                        .getBytes(StandardCharsets.UTF_8));
             }
         }
 

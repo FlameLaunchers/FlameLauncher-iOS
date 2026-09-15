@@ -89,6 +89,18 @@ struct SettingsView: View {
         }
     }
 
+    /// 지금 배율에서 HUD 가 얼마나 커지는지. 기준은 55%(가장 흔한 기본값)가 아니라
+    /// **이 화면에서 가능한 최대**(가상 높이 240)로 잡는다 — "최대의 몇 %" 가 직관적이다.
+    private var hudLabel: String {
+        let full = JvmSettings.lastFullFramebufferHeight
+        let now = JvmSettings.hudRelativeSize(fullHeightPx: full,
+                                              percent: settings.resolutionScalePercent)
+        let best = (JvmSettings.resScaleMin...JvmSettings.resScaleMax)
+            .map { JvmSettings.hudRelativeSize(fullHeightPx: full, percent: $0) }
+            .max() ?? now
+        return "\(Int((now / best * 100).rounded()))%"
+    }
+
     private var screenSection: some View {
         Section("화면 설정") {
             toggleRow("🖥", "전체 화면", "시스템 바를 숨기고 화면을 꽉 채웁니다",
@@ -102,12 +114,94 @@ struct SettingsView: View {
                 ),
                 range: Double(JvmSettings.resScaleMin)...Double(JvmSettings.resScaleMax),
                 step: 5,
-                valueLabel: "\(settings.resolutionScalePercent)%",
-                note: "낮출수록 프레임버퍼가 작아져 FPS가 오르고 화면은 약간 흐려집니다."
+                valueLabel: "\(settings.resolutionScalePercent)% · HUD \(hudLabel)",
+                note: "낮출수록 프레임버퍼가 작아져 FPS가 오르고 화면은 약간 흐려집니다.\n"
+                    + "HUD 크기는 배율에 비례하지 않습니다 — 마인크래프트가 가상 화면을 "
+                    + "최소 320x240 으로 잡아서, 배율을 올렸는데 인벤토리가 작아지는 구간이 "
+                    + "있습니다. 위 HUD 배수가 클수록 인벤토리·핫바가 큽니다."
             )
+
+            hudRow
         }
     }
 
+    /// HUD 크기를 해상도와 **따로** 고르게 한다.
+    ///
+    /// ⚠️ "자동" 은 마인크래프트가 정하는 값이고, 폰 가로 화면에서는 항상 스케일 2 에서
+    ///    막힌다(가상 화면 ≥ 320x240 이 하드코딩돼 있다). 그 위 단계들은 그 하한을
+    ///    실행 중에 낮춰서 얻는 것이라 게임 설정만으로는 나오지 않는다.
+    ///
+    /// ⚠️ **잘리는 단계는 아예 못 고르게 한다.** 하한을 낮추면 GUI 가 화면보다 커질 수
+    ///    있는데(대형 상자가 222 로 가장 크다), 그건 HUD 가 커진 게 아니라 못 쓰게 된
+    ///    것이다. 지금 해상도에서 안 되는 단계에는 필요한 해상도를 같이 적어 준다.
+    private var hudRow: some View {
+        let fullH = JvmSettings.lastFullFramebufferHeight
+        let fbH = fullH * settings.resolutionScalePercent / 100
+        let maxScale = JvmSettings.maxHudScale(framebufferHeight: fbH)
+        let autoScale = JvmSettings.guiScale(fullHeightPx: fullH,
+                                             percent: settings.resolutionScalePercent)
+        let chosen = settings.hudScale == 0
+            ? autoScale
+            : JvmSettings.effectiveHudScale(settings.hudScale, framebufferHeight: fbH)
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("🔍").font(.system(size: 18))
+                Text("HUD 크기").font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(FlameColor.textMain)
+                Spacer()
+                Text(settings.hudScale == 0 ? "자동 (\(autoScale)배)" : "\(chosen)배")
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .foregroundStyle(FlameColor.primary)
+            }
+
+            HStack(spacing: 6) {
+                hudChoice(0, label: "자동", enabled: true)
+                ForEach(2...4, id: \.self) { value in
+                    hudChoice(value, label: "\(value)배", enabled: value <= maxScale)
+                }
+            }
+
+            Text(hudNote(maxScale: maxScale, autoScale: autoScale, fullH: fullH))
+                .font(.system(size: 10))
+                .foregroundStyle(FlameColor.textSub)
+        }
+        .padding(14)
+        .flameCard(fill: FlameColor.bgItem, radius: 10)
+    }
+
+    /// 고를 수 없는 단계는 눌리지 않고 흐리게 둔다 — 숨기면 왜 없는지 알 수 없다.
+    private func hudChoice(_ value: Int, label: String, enabled: Bool) -> some View {
+        let selected = settings.hudScale == value
+        return Button { if enabled { settings.hudScale = value } } label: {
+            Text(label)
+                .font(.system(size: 12, weight: selected ? .bold : .regular))
+                .foregroundStyle(!enabled ? FlameColor.textSub.opacity(0.4)
+                                 : selected ? .white : FlameColor.textSub)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .flameCard(fill: selected ? FlameColor.flame : FlameColor.bgSurface,
+                           stroke: selected ? FlameColor.flame : FlameColor.bgBorder,
+                           radius: 8)
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+    }
+
+    private func hudNote(maxScale: Int, autoScale: Int, fullH: Int) -> String {
+        // 다음 단계를 열려면 해상도를 얼마나 올려야 하는지 알려준다.
+        if maxScale < 4,
+           let need = JvmSettings.minResolutionPercent(forHudScale: maxScale + 1,
+                                                       fullHeightPx: fullH),
+           need > settings.resolutionScalePercent {
+            return "인벤토리·핫바가 커지고 터치 영역도 같이 커집니다. "
+                 + "\(maxScale + 1)배는 대형 상자가 잘려서 잠겨 있습니다 — "
+                 + "렌더 해상도를 \(need)% 이상으로 올리면 열립니다."
+        }
+        return maxScale > autoScale
+            ? "인벤토리·핫바가 커지고 터치 영역도 같이 커집니다. 잘리는 단계는 잠겨 있습니다."
+            : "지금 해상도에서는 자동값이 이미 최대입니다. 해상도를 올리면 더 큰 단계가 열립니다."
+    }
     private var memorySection: some View {
         Section("메모리", note: "기기 전체 \(JvmSettingsStore.totalRamMb)MB · 권장 상한 \(ceiling)MB") {
             sliderRow(

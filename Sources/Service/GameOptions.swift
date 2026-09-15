@@ -60,7 +60,8 @@ enum GameOptions {
     /// options.txt 를 읽어 guiScale 을 돌려준다(핫바 터치 영역 계산에 쓴다).
     @discardableResult
     static func sync(
-        file: URL, settings: JvmSettings, modCount: Int, versionId: String
+        file: URL, settings: JvmSettings, modCount: Int, versionId: String,
+        hudScale: Int
     ) -> Int {
         var lines = (try? String(contentsOf: file, encoding: .utf8))?
             .components(separatedBy: .newlines)
@@ -121,6 +122,13 @@ enum GameOptions {
         //   GL 드라이버 + Zink(OSMesa) 조합에서 힙이 손상돼 렌더 스레드가 강제 종료된다.
         //   크래시 방지는 타협 불가라 사용자 설정 보존 대상에서 제외한다.
         if currentInt("mipmapLevels") != 0 { upsert("mipmapLevels", "0") }
+
+        // ── HUD 크기: 사용자가 정했으면 매 실행 강제 ──
+        //   "자동"(0)은 손대지 않는다 — 게임 안에서 바꾼 값을 그대로 둔다.
+        //   0 이 아니면 에이전트가 하한을 낮춰 두므로 이 값이 실제로 먹는다.
+        if hudScale > 0, currentInt("guiScale") != hudScale {
+            upsert("guiScale", String(hudScale))
+        }
 
         try? lines.joined(separator: "\n").write(to: file, atomically: true, encoding: .utf8)
         return currentInt("guiScale") ?? 0

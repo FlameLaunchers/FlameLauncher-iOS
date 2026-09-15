@@ -402,6 +402,41 @@ bool FlameNativeRequestDebuggerJIT(void) {
     return true;
 }
 
+/// 버전을 바꿀 때 쓰는 변형. **pid 를 넘기지 않는다.**
+///
+/// 위 함수는 `pid=getpid()` 로 "지금 이 프로세스에 붙어라"를 요청한다. 그런데 자바
+/// 가상머신은 프로세스당 한 번만 뜨므로, 다른 버전으로 넘어가려면 **새 프로세스**가
+/// 필요하다. 그래서 bundle-id 만 넘겨 이 번들을 대상으로 요청하고, 곧바로 스스로
+/// 종료한다 — 디버거 도구가 새로 띄우면 그 프로세스는 처음부터 JIT 가 붙어 있다.
+///
+/// ⚠️ 도구가 "실행 중인 앱에 붙이기"만 하고 띄워 주지는 않을 수도 있다. 그 경우
+///    사용자는 앱 아이콘을 한 번 누르면 되고, 그때도 예약된 인스턴스로 바로 이어진다
+///    (LauncherModel.resumePendingLaunchIfNeeded). 어느 쪽이든 손으로 버전을 다시
+///    찾아 누르던 예전보다는 짧다.
+bool FlameNativeRequestDebuggerJITForRelaunch(void) {
+    if (@available(iOS 17.4, *)) {} else return false;   // 17.3 이하는 pid 로만 동작한다
+
+    NSString *bundleId = NSBundle.mainBundle.bundleIdentifier;
+    NSString *scriptParam = @"";
+    if (FlameNativeHasJITFlags(FlameJITFlagForceMirrored | FlameJITFlagHasTXM)) {
+        NSString *path = [NSBundle.mainBundle pathForResource:@"UniversalJIT26" ofType:@"js"];
+        NSData *script = path ? [NSData dataWithContentsOfFile:path] : nil;
+        if (script) {
+            NSString *encoded = [[script base64EncodedStringWithOptions:0]
+                stringByAddingPercentEncodingWithAllowedCharacters:
+                    NSCharacterSet.URLQueryAllowedCharacterSet];
+            scriptParam = [@"&script-data=" stringByAppendingString:encoded];
+        }
+    }
+
+    NSURL *url = [NSURL URLWithString:
+        [NSString stringWithFormat:@"stikjit://enable-jit?bundle-id=%@%@", bundleId, scriptParam]];
+    if (!url || ![UIApplication.sharedApplication canOpenURL:url]) return false;
+
+    [UIApplication.sharedApplication openURL:url options:@{} completionHandler:nil];
+    return true;
+}
+
 // MARK: - AltServer (AltKit)
 
 // AltKit 은 AltStore 가 만든 Swift 프레임워크다. **링크하지 않고** 런타임에 찾는다 —

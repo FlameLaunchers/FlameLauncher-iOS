@@ -8,14 +8,17 @@ import SwiftUI
 ///  3) 렌더 해상도 (게임 중에 바로 반영된다)
 ///  4) 게임 종료
 ///
-/// 안드로이드의 4번째 구역인 온라인 LAN(Terracotta)은 여기 없다 —
-/// 안드로이드는 VpnService 로 TUN 장치를 열어 P2P 를 했는데, iOS 에서 같은 일을 하려면
-/// NetworkExtension(Personal VPN) 엔타이틀먼트가 필요하고 이는 애플 승인 대상이다.
-/// 자세한 내용은 README 의 '옮기지 않은 것' 절.
+/// 온라인 LAN(Terracotta)도 여기 있다. 런처 왼쪽 메뉴가 아니라 **인게임 메뉴**에 둔 이유는
+/// 쓰는 순간이 게임 안이기 때문이다 — 월드를 열고 `ESC → LAN 에 공개` 를 누른 **다음에**
+/// 방을 열어야 하고, 참가할 때 받은 주소는 게임의 서버 목록에 바로 넣어야 한다.
+/// 런처 화면에 있으면 그때마다 게임을 빠져나와야 한다.
+///
+/// ⚠️ TUN 은 쓰지 않는다. iOS 에서 TUN 은 NetworkExtension 뿐이고 그 권한은 무료 개발자
+///    계정으로 서명되지 않는다. EasyTier 의 no-TUN 모드로 도므로 방장 노릇은 그대로 되고,
+///    참가는 주소를 직접 넣어야 한다.
 struct InGameMenuView: View {
     /// 자바 스레드 덤프를 로그에 남긴다. 부팅이나 화면이 멈췄을 때 쓴다.
     let onDumpThreads: () -> Void
-    @Binding var hotbarScale: Int
     /// 렌더 해상도(%). 게임이 도는 중에 바꿔도 바로 먹는다 —
     /// 프레임버퍼가 다시 잡히고 GLFW 리사이즈가 게임에 전달된다.
     @Binding var resolutionPercent: Int
@@ -23,6 +26,7 @@ struct InGameMenuView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var dumped = false
+    @State private var terracotta = Terracotta.shared
 
     var body: some View {
         NavigationStack {
@@ -31,7 +35,7 @@ struct InGameMenuView: View {
 
                 ScrollView {
                     VStack(spacing: 14) {
-                        hotbarCard
+                        multiplayerCard
                         resolutionCard
                         diagnosticsCard
                         quitCard
@@ -54,35 +58,45 @@ struct InGameMenuView: View {
         .modifier(WidePresentation())
     }
 
-    private var hotbarCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("핫바 터치 영역 크기")
-                .font(.system(size: 14, weight: .bold)).foregroundStyle(FlameColor.textMain)
-            // 화면 핫바 크기는 마인크래프트 옵션(GUI Scale)에서 바꾸고,
-            // 여기서는 "핫바를 터치로 인식하는 영역"만 거기에 맞춘다.
-            Text("Auto 가 안 맞으면 1~4 로 직접 맞추세요 (마인크래프트 GUI Scale 과 같은 단위)")
-                .font(.system(size: 11)).foregroundStyle(FlameColor.textSub)
-
-            HStack(spacing: 6) {
-                ForEach(0...4, id: \.self) { value in
-                    let selected = hotbarScale == value
-                    Button { hotbarScale = value } label: {
-                        Text(value == 0 ? "Auto" : "\(value)")
-                            .font(.system(size: 12, weight: selected ? .bold : .regular))
-                            .foregroundStyle(selected ? .white : FlameColor.textSub)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                            .flameCard(fill: selected ? FlameColor.flame : FlameColor.bgSurface,
-                                       stroke: selected ? FlameColor.flame : FlameColor.bgBorder,
-                                       radius: 8)
-                    }
-                    .buttonStyle(.plain)
+    /// 온라인 LAN 진입. 상태를 여기서 한 줄로 보여주고, 자세한 조작은 다음 화면에서 한다.
+    private var multiplayerCard: some View {
+        NavigationLink {
+            TerracottaView()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 17))
+                    .foregroundStyle(FlameColor.primary)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("온라인 LAN")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(FlameColor.textMain)
+                    Text(multiplayerSubtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(FlameColor.textSub)
+                        .lineLimit(1)
                 }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(FlameColor.textSub)
             }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .flameCard(fill: FlameColor.bgSurface, radius: 12)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .flameCard(fill: FlameColor.bgItem, radius: 10)
+        .buttonStyle(.plain)
+    }
+
+    private var multiplayerSubtitle: String {
+        switch terracotta.state {
+        case .hostOK(let room):  return "방 열림 · \(room)"
+        case .guestOK:           return "연결됨"
+        case .failed(let why):   return why
+        case .stopped:           return "월드를 LAN 에 공개한 뒤 방을 여세요"
+        default:                 return "방 코드로 친구와 함께 하기"
+        }
     }
 
     private var resolutionCard: some View {

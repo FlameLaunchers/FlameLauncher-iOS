@@ -21,6 +21,15 @@ NS_ASSUME_NONNULL_BEGIN
 /// GL4ES/ANGLE 경로는 CAMetalLayer 를, OSMesa(Zink) 경로는 일반 CALayer 를 기대한다.
 void FlameNativeSetSurfaceLayer(CALayer *_Nullable layer);
 
+/// LWJGL 할당자로 넘길 함수 포인터 여섯 개(malloc, calloc, realloc, free,
+/// aligned_alloc, aligned_free). 큰 할당을 파일 기반 매핑으로 돌려 jetsam 장부에서
+/// 빼기 위한 것이다 — 자세한 사정은 `flame_alloc.c` 주석.
+void flame_alloc_pointers(uint64_t out[6]);
+
+/// 지금 파일 기반으로 들고 있는 바이트 / 매핑에 실패해 malloc 으로 떨어진 횟수.
+uint64_t flame_alloc_mapped_bytes(void);
+uint64_t flame_alloc_map_failures(void);
+
 /// 프레임버퍼 크기(픽셀). 해상도 배율이 적용된 값을 넘긴다.
 void FlameNativeSetScreenSize(int width, int height);
 
@@ -168,6 +177,10 @@ void FlameNativeStopAltServerDiscovery(void);
 
 /// 진단 문자열 — 왜 못 도는지 사용자에게 그대로 보여준다.
 NSString *FlameNativeDiagnostics(void);
+
+/// 버전 전환용 JIT 요청. pid 대신 bundle-id 만 넘겨 **새 프로세스**를 대상으로 한다.
+/// 부른 쪽은 곧바로 스스로 종료해야 한다 — 자세한 사정은 구현부 주석 참고.
+bool FlameNativeRequestDebuggerJITForRelaunch(void);
 
 #pragma mark - 테라코타(온라인 LAN)
 

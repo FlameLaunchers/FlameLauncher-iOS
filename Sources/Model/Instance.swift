@@ -29,6 +29,11 @@ struct InstanceMeta: Codable, Identifiable, Hashable {
     var sourceModId: Int?
     /// "zink" / "gl4es" / "mobileglues" / "krypton". nil 이면 전역 기본 렌더러.
     var rendererId: String?
+    /// 마지막으로 실행한 시각. 목록을 최근 순으로 세우는 데 쓴다.
+    ///
+    /// ⚠️ 선택값이다. 안드로이드가 쓴 instance.json 이나 이 필드가 생기기 전에 만든
+    ///    인스턴스에는 없다 — 없으면 이름순 뒤로 간다.
+    var lastPlayedAt: Date?
 
     var dir: URL { Paths.instance(id) }
     var iconURL: URL? { iconPath.map { dir.appending(path: $0) } }
@@ -88,8 +93,42 @@ final class InstanceStore {
         )) ?? []
         instances = dirs
             .compactMap { loadMeta(dir: $0) }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            .sorted(by: Self.recentFirst)
     }
+
+    /// 최근 실행한 것이 위로. 실행한 적 없는 것들끼리는 이름순.
+    ///
+    /// 방금 돌린 버전을 목록 한가운데서 다시 찾는 게 번거로워서 이렇게 세운다.
+    /// 이름순을 완전히 버리지는 않는다 — 한 번도 안 돌린 인스턴스는 순서가 고정되어야
+    /// 어디 있는지 기억할 수 있다.
+    static func recentFirst(_ a: InstanceMeta, _ b: InstanceMeta) -> Bool {
+        switch (a.lastPlayedAt, b.lastPlayedAt) {
+        case let (x?, y?): return x > y
+        case (_?, nil):    return true
+        case (nil, _?):    return false
+        case (nil, nil):   return a.name.localizedStandardCompare(b.name) == .orderedAscending
+        }
+    }
+
+    /// 이 인스턴스를 방금 실행했다고 기록하고 목록을 다시 세운다.
+    func notePlayed(_ meta: InstanceMeta) {
+        guard var stored = instances.first(where: { $0.id == meta.id }) ?? loadMeta(dir: meta.dir)
+        else { return }
+        stored.lastPlayedAt = .now
+        save(stored)
+        reload()
+    }
+
+    // ⚠️ 여기에 "jetsam 을 겪으면 아틀라스 상한을 낮춘다" 는 적응 로직이 있었다. 지웠다.
+    //
+    //    측정해 보니 아틀라스는 footprint 의 8% 뿐이었고(익명 1135 + 압축 1528 중
+    //    아틀라스 256), 진짜 원인은 LWJGL 을 지나는 네이티브 할당 전체였다.
+    //    그건 파일 기반 매핑 할당자로 뿌리부터 해결했다 — 실측 3069 MB → 1150 MB.
+    //    (Sources/Natives/flame_alloc.c · JvmSettings.allocatorArgs)
+    //
+    //    남겨 두면 해만 끼친다: 상한이 1024 까지 내려가자 MobileGlues 가 아틀라스가 아니라
+    //    **마인크래프트의 메인 렌더 타깃**(=화면 크기 텍스처)을 줄여서 화면이 잘렸다.
+    //      MGTEX 1533x707 -> 766x353 (상한 1024 강제)
 
     func loadMeta(dir: URL) -> InstanceMeta? {
         guard let data = try? Data(contentsOf: dir.appending(path: Self.metaFile)) else { return nil }

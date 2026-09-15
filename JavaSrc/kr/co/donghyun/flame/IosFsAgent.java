@@ -40,7 +40,13 @@ public final class IosFsAgent {
     private static final String METHOD = "isCaseInsensitiveAndPreserving";
     private static final String DESCRIPTOR = "()Z";
 
+    /** `-Dflame.guiFloor=<w>x<h>` — 런처가 원하는 GUI 스케일에 맞춰 계산해 넘긴다. */
+    private static int guiFloorW, guiFloorH;
+    /** 한 번 찾으면 더는 훑지 않는다(클래스 수천 개를 매번 볼 이유가 없다). */
+    private static boolean guiFloorDone;
+
     public static void premain(String args, Instrumentation inst) {
+        readGuiFloor();
         inst.addTransformer(new Transformer(), true);
 
         // 이 클래스는 JVM 이 뜨면서 이미 로드됐을 가능성이 크다 — 다시 변환해야 한다.
@@ -59,7 +65,7 @@ public final class IosFsAgent {
         @Override
         public byte[] transform(ClassLoader loader, String className, Class<?> beingRedefined,
                                 ProtectionDomain domain, byte[] classfile) {
-            if (!TARGET.equals(className)) return null;
+            if (!TARGET.equals(className)) return patchGui(classfile);
             try {
                 byte[] patched = patch(classfile);
                 System.out.println(patched == null
@@ -84,25 +90,7 @@ public final class IosFsAgent {
      */
     static byte[] patch(byte[] cf) {
         Reader r = new Reader(cf);
-        r.skip(8);                                   // magic, minor, major
-
-        int constantCount = r.u2();
-        String[] utf8 = new String[constantCount];
-        for (int i = 1; i < constantCount; i++) {
-            int tag = r.u1();
-            switch (tag) {
-                case 1:  utf8[i] = r.utf8(); break;                 // Utf8
-                case 7: case 8: case 16: case 19: case 20:
-                         r.skip(2); break;
-                case 15: r.skip(3); break;                          // MethodHandle
-                case 5: case 6:                                     // Long / Double
-                         r.skip(8); i++; break;                     //  — 칸을 두 개 먹는다
-                default: r.skip(4); break;                          // 나머지는 전부 4바이트
-            }
-        }
-
-        r.skip(6);                                   // access, this, super
-        r.skip(2 * r.u2());                          // interfaces
+        String[] utf8 = readHeader(r);
 
         for (int pass = 0; pass < 2; pass++) {       // 0 = fields, 1 = methods
             int count = r.u2();
@@ -132,6 +120,154 @@ public final class IosFsAgent {
             }
         }
         return null;
+    }
+
+    private static void readGuiFloor() {
+        String spec = System.getProperty("flame.guiFloor");
+        if (spec == null) return;
+        int x = spec.indexOf('x');
+        if (x <= 0) return;
+        try {
+            guiFloorW = Integer.parseInt(spec.substring(0, x));
+            guiFloorH = Integer.parseInt(spec.substring(x + 1));
+        } catch (NumberFormatException ignored) {
+            guiFloorW = guiFloorH = 0;
+        }
+    }
+
+    /**
+     * 모든 클래스를 지나가며 {@code calculateScale} 을 찾는다.
+     *
+     * <p>이름으로 못 거르는 대신(바닐라는 난독화) 서술자로 거르므로 거의 모든 클래스가
+     * 메서드 테이블만 훑고 바로 빠진다. 찾는 즉시 멈춘다 —
+     * {@code Window} 는 {@code Minecraft.&lt;init&gt;} 에서 바로 만들어지므로 초반에 끝난다.
+     */
+    private static byte[] patchGui(byte[] classfile) {
+        if (guiFloorDone || guiFloorW <= 0 || guiFloorH <= 0) return null;
+        byte[] patched;
+        try {
+            patched = patchGuiFloor(classfile, guiFloorW, guiFloorH);
+        } catch (Throwable t) {
+            return null;                             // 우리가 볼 클래스가 아니었다
+        }
+        if (patched == null) return null;
+        guiFloorDone = true;
+        System.out.println("[FlameHUD] GUI 스케일 하한 320x240 → "
+                + guiFloorW + "x" + guiFloorH + " (HUD 확대)");
+        return patched;
+    }
+
+    /**
+     * 매직·상수풀·access/this/super·인터페이스까지 읽고 커서를 필드 테이블 앞에 둔다.
+     *
+     * @return 인덱스로 찾을 수 있는 Utf8 상수들(다른 태그 자리는 null)
+     */
+    private static String[] readHeader(Reader r) {
+        r.skip(8);                                   // magic, minor, major
+
+        int constantCount = r.u2();
+        String[] utf8 = new String[constantCount];
+        for (int i = 1; i < constantCount; i++) {
+            int tag = r.u1();
+            switch (tag) {
+                case 1:  utf8[i] = r.utf8(); break;                 // Utf8
+                case 7: case 8: case 16: case 19: case 20:
+                         r.skip(2); break;
+                case 15: r.skip(3); break;                          // MethodHandle
+                case 5: case 6:                                     // Long / Double
+                         r.skip(8); i++; break;                     //  — 칸을 두 개 먹는다
+                default: r.skip(4); break;                          // 나머지는 전부 4바이트
+            }
+        }
+
+        r.skip(6);                                   // access, this, super
+        r.skip(2 * r.u2());                          // interfaces
+        return utf8;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  HUD 크기 상한 풀기
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** `sipush 320` — 가상 화면 최소 **너비**. */
+    private static final int FLOOR_W = 320;
+    /** `sipush 240` — 가상 화면 최소 **높이**. */
+    private static final int FLOOR_H = 240;
+
+    /**
+     * 마인크래프트가 GUI 스케일에 거는 하한을 낮춰서 HUD 를 더 키울 수 있게 한다.
+     *
+     * <p>{@code Window.calculateScale(int guiScale, boolean forceUnicode)} 는 이렇게 생겼다:
+     *
+     * <pre>
+     *   for (i = 1; i != guiScale &amp;&amp; i &lt; fbW &amp;&amp; i &lt; fbH
+     *               &amp;&amp; fbW / (i + 1) &gt;= 320 &amp;&amp; fbH / (i + 1) &gt;= 240; ++i);
+     * </pre>
+     *
+     * <p>즉 "가상 화면은 최소 320x240" 이 하드코딩돼 있다. 폰처럼 가로로 긴 화면에서는
+     * 높이가 먼저 걸려서 <b>GUI 스케일 상한 = 프레임버퍼높이/240</b> 이 되고,
+     * 아이폰 15 가로(높이 615)에서는 스케일 2 에서 막힌다. 슬롯 한 칸이 22pt 라
+     * 애플 권장 터치 영역(44pt)의 절반이고, 해상도를 어떻게 조절해도 이 천장은
+     * 못 넘는다(최대 1.28배).
+     *
+     * <p>그래서 저 두 상수를 직접 낮춘다. {@code sipush} 의 피연산자는 상수풀이 아니라
+     * Code 안에 그대로 박혀 있어서 2바이트만 고치면 되고, 스택맵 프레임도 안 바뀐다.
+     *
+     * <p>이름으로 찾지 않는다 — 포지는 공식 이름({@code net.minecraft.client.Window})을
+     * 쓰지만 바닐라는 난독화돼 있다. 서술자 {@code (IZ)I} 인 메서드 중 본문에
+     * {@code sipush 320} 과 {@code sipush 240} 이 그 순서로 있는 것을 찾는다.
+     * 게임 전체에서 사실상 이 메서드 하나뿐이다.
+     *
+     * @return 고친 클래스 바이트, 해당 메서드가 아니면 null
+     */
+    static byte[] patchGuiFloor(byte[] cf, int floorW, int floorH) {
+        Reader r = new Reader(cf);
+        String[] utf8 = readHeader(r);
+
+        for (int pass = 0; pass < 2; pass++) {       // 0 = fields, 1 = methods
+            int count = r.u2();
+            for (int i = 0; i < count; i++) {
+                r.skip(2);                           // access_flags
+                r.skip(2);                           // name
+                String descriptor = utf8[r.u2()];
+                int attrCount = r.u2();
+                for (int a = 0; a < attrCount; a++) {
+                    String attrName = utf8[r.u2()];
+                    int length = r.u4();
+                    int end = r.at + length;
+                    if (pass == 1 && "Code".equals(attrName) && "(IZ)I".equals(descriptor)) {
+                        r.skip(4);                   // max_stack, max_locals
+                        int codeLength = r.u4();
+                        if (rewriteFloors(cf, r.at, r.at + codeLength, floorW, floorH)) {
+                            return cf;
+                        }
+                    }
+                    r.at = end;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** [from, to) 안에서 `sipush 320` 다음 `sipush 240` 을 찾아 피연산자를 갈아끼운다. */
+    private static boolean rewriteFloors(byte[] cf, int from, int to, int floorW, int floorH) {
+        int w = indexOfSipush(cf, from, to, FLOOR_W);
+        if (w < 0) return false;
+        int h = indexOfSipush(cf, w + 3, to, FLOOR_H);
+        if (h < 0) return false;
+
+        cf[w + 1] = (byte) (floorW >> 8); cf[w + 2] = (byte) floorW;
+        cf[h + 1] = (byte) (floorH >> 8); cf[h + 2] = (byte) floorH;
+        return true;
+    }
+
+    /** `sipush <value>` (0x11 hi lo) 의 시작 오프셋. 없으면 -1. */
+    private static int indexOfSipush(byte[] cf, int from, int to, int value) {
+        byte hi = (byte) (value >> 8), lo = (byte) value;
+        for (int i = from; i + 2 < to; i++) {
+            if ((cf[i] & 0xFF) == 0x11 && cf[i + 1] == hi && cf[i + 2] == lo) return i;
+        }
+        return -1;
     }
 
     /** 클래스 파일을 앞에서부터 읽기만 하는 커서. */

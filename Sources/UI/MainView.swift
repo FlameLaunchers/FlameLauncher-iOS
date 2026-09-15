@@ -10,7 +10,7 @@ import SwiftUI
 ///   네비게이션 바 툴바에 있는데, 메인 화면은 네비바를 숨긴다. 그대로 끼우면
 ///   버튼이 통째로 사라진다.
 enum MainSection: String, CaseIterable, Identifiable {
-    case instances, modpacks, settings, keyboard, terracotta, notes
+    case instances, modpacks, settings, keyboard, notes
 
     var id: String { rawValue }
 
@@ -20,7 +20,6 @@ enum MainSection: String, CaseIterable, Identifiable {
         case .modpacks:  return "모드팩 설치"
         case .settings:  return "옵션 · 렌더러"
         case .keyboard:  return "키보드 편집"
-        case .terracotta: return "온라인 LAN"
         case .notes:     return "업데이트 노트"
         }
     }
@@ -31,7 +30,6 @@ enum MainSection: String, CaseIterable, Identifiable {
         case .modpacks:  return "CurseForge · Modrinth"
         case .settings:  return "메모리 · 해상도 · 렌더러"
         case .keyboard:  return "화면 버튼 배치"
-        case .terracotta: return "방 코드로 함께 플레이"
         case .notes:     return "저장소 README"
         }
     }
@@ -44,7 +42,6 @@ enum MainSection: String, CaseIterable, Identifiable {
         case .modpacks:  return "shippingbox.fill"
         case .settings:  return "slider.horizontal.3"
         case .keyboard:  return "keyboard.fill"
-        case .terracotta: return "antenna.radiowaves.left.and.right"
         case .notes:     return "doc.text.fill"
         }
     }
@@ -57,7 +54,6 @@ enum MainSection: String, CaseIterable, Identifiable {
         case .modpacks: return .contentBrowser
         case .settings: return .settings
         case .keyboard: return .keyLayout
-        case .terracotta: return .terracotta
         default:        return nil
         }
     }
@@ -96,7 +92,6 @@ struct MainView: View {
 
     @State private var tab: MainTab = .installed
     @State private var section: MainSection = .instances
-    @State private var showVersionPicker = false
     @State private var showLoaderSheet = false
     @State private var instances = InstanceStore.shared.instances
 
@@ -119,19 +114,24 @@ struct MainView: View {
             //    ⚠️ 설치됨 탭에서는 띄우지 않는다. 목록 아래 InstalledPanel 이 이미 같은 것을
             //       — 인스턴스 이름, MC 버전, ▶실행 — 전부 들고 있어서 두 번 나온다.
             //       거긴 렌더러 선택까지 있으니 그쪽을 남긴다.
+            // 설치 진행 표시. 어떤 탭이든, 폰이든 태블릿이든 항상 보여야 한다 —
+            // 모드 로더·모드팩 설치는 몇 분씩 걸리고, 그동안 아무 표시가 없으면
+            // 멈춘 것과 구분이 안 된다.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if launcher.progress.isActive || launcher.progress.phase == .error {
+                    ProgressRow(progress: launcher.progress)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(FlameColor.bgSurface)
+                        .overlay(Rectangle().frame(height: 1).foregroundStyle(FlameColor.bgBorder),
+                                 alignment: .top)
+                }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if !tablet && tab != .installed { MobileBottomBar(tab: tab, onPlay: play) }
             }
         }
         .toolbar(.hidden, for: .navigationBar)
-        .sheet(isPresented: $showVersionPicker) {
-            VersionPickerSheet(versions: launcher.versions) { version in
-                showVersionPicker = false
-                install(version)
-            }
-            .environment(launcher)
-            .environment(auth)
-        }
         .sheet(isPresented: $showLoaderSheet) {
                 // ⚠️ 시트/커버는 SwiftUI 가 **별도의 PresentationHostingController** 로 띄운다.
                 //    우리는 환경을 루트 UIHostingController 바깥에서 걸기 때문에(AppDelegate),
@@ -154,44 +154,28 @@ struct MainView: View {
         .overlay {
             if let meta = launcher.launchingInstance { LaunchingDialog(meta: meta) }
         }
-        // JVM 은 프로세스당 한 번뿐이라, 다른 인스턴스로 넘어가려면 앱을 다시 시작해야 한다.
-        // 그냥 막고 끝내면 "눌러도 아무 일이 없다"가 되므로 이유와 방법을 같이 준다.
-        //
-        // ⚠️ **자기 앵커(Color.clear)에서 띄운다.** 한 뷰에 .alert 를 여러 개 붙이면
-        //    나중 것이 앞의 것을 덮어서 앞의 알림은 영영 안 뜬다. 아래에 .alert 가 둘 더
-        //    있어서, 이걸 같은 자리에 두면 재시작 안내가 **뜨지 않는다** — 막으려던
-        //    "눌러도 아무 일이 없다"가 그대로 재현된다(실제로 그랬다).
-        .background {
-            Color.clear.alert(item: $launcher.restartRequest) { request in
-                Alert(
-                    title: Text("앱을 다시 시작해야 합니다"),
-                    message: Text("""
-                        이번 실행에서는 \(request.booted) 을(를) 이미 띄웠습니다.
-                        자바 가상머신은 앱 실행당 한 번만 뜰 수 있어서, \(request.target.name) 로 \
-                        바꾸려면 앱을 완전히 종료했다가 다시 열어야 합니다.
-                        """),
-                    primaryButton: .destructive(Text("지금 종료")) {
-                        // 다시 열었을 때 이 인스턴스로 곧장 이어지게 적어 둔다 —
-                        // 사용자가 버전을 다시 찾아 누르는 단계를 없앤다.
-                        LauncherModel.notePendingLaunch(request.target.id)
-                        exit(0)
-                    },
+        // ⚠️ 이 앱의 알림은 **여기 하나뿐이다.** 한 뷰에 .alert 를 여러 개 붙이면
+        //    나중 것이 앞의 것을 덮어서 앞의 알림이 영영 안 뜬다 — 버전 전환 안내가
+        //    두 번이나 그렇게 사라졌다. 확인 동작이 필요한 알림도 이 채널로 보낸다.
+        .alert(item: $launcher.alert) { alert in
+            if let confirm = alert.confirm {
+                return Alert(
+                    title: Text(alert.title),
+                    message: Text(alert.message),
+                    primaryButton: .default(Text(alert.confirmTitle ?? "확인"), action: confirm),
                     secondaryButton: .cancel(Text("나중에"))
                 )
             }
-        }
-        .alert(item: $launcher.alert) { alert in
-            Alert(title: Text(alert.title), message: Text(alert.message),
-                  dismissButton: .default(Text("확인")))
+            return Alert(title: Text(alert.title), message: Text(alert.message),
+                         dismissButton: .default(Text("확인")))
         }
         // 로그인 실패는 조용히 삼키면 안 된다 — 사용자는 "눌렀는데 아무 일도 안 일어남" 만 겪는다.
-        .alert("로그인 실패", isPresented: .init(
-            get: { auth.error != nil },
-            set: { if !$0 { auth.error = nil } }
-        )) {
-            Button("확인") { auth.error = nil }
-        } message: {
-            Text(auth.error ?? "")
+        // 로그인 실패도 같은 채널로 보낸다. 별도 .alert 를 달면 위의 알림을 덮어
+        // 버전 전환 안내가 안 뜬다 — 실제로 그렇게 두 번 놓쳤다.
+        .onChange(of: auth.error) { _, message in
+            guard let message, !message.isEmpty else { return }
+            launcher.alert = LauncherModel.AlertMessage(title: "로그인 실패", message: message)
+            auth.error = nil
         }
         .overlay {
             if auth.isBusy { LoginProgressOverlay(step: auth.progress) }
@@ -377,16 +361,7 @@ struct MainView: View {
     /// ⚠️ 호출부가 이미 `tab == .installed` 안에 있다. 여기서 또 분기하면 죽은 가지가 생긴다
     ///    (실제로 정식·전체용 패널이 하나 더 있었는데 영원히 그려지지 않았다).
     private var sidePanel: some View {
-        InstalledPanel(
-            count: instances.count, selected: selectedInstance,
-            onLaunch: play,
-            onChangeVersion: { showVersionPicker = true },
-            onChangeRenderer: { renderer in
-                guard let id = launcher.selectedInstanceId else { return }
-                InstanceStore.shared.updateRendererId(id, rendererId: renderer?.rawValue)
-                instances = InstanceStore.shared.instances
-            }
-        )
+        InstalledPanel(count: instances.count, selected: selectedInstance, onLaunch: play)
     }
 
     private var selectedInstance: InstanceMeta? {
@@ -726,47 +701,33 @@ private struct InstalledPanel: View {
     let count: Int
     let selected: InstanceMeta?
     let onLaunch: () -> Void
-    let onChangeVersion: () -> Void
-    let onChangeRenderer: (Renderer?) -> Void
 
-    /// 한 줄에 놓이는 카드 셋(버전 · 렌더러 · 실행)의 공통 높이.
+    /// 한 줄에 놓이는 카드 셋(버전 · 실행)의 공통 높이.
     private static var rowHeight: CGFloat { Sizing.isTablet ? 46 : 40 }
 
-    // ⚠️ 예전에는 세로로 쌓아 Spacer 로 늘였다. 목록 아래 띠로 들어가면서 렌더러 행이
-    //    화면 밖으로 밀려 **스크롤해야 보였다.** 한 줄에 담아 항상 보이게 한다.
     var body: some View {
         if let selected {
             HStack(alignment: .center, spacing: 12) {
-                // 버전 변경 입구
-                Button(action: onChangeVersion) {
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(selected.name)
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(FlameColor.textMain)
-                                .lineLimit(1)
-                            Text("MC \(selected.mcVersion) · \(selected.loaderLabel)")
-                                .font(.system(size: 11)).foregroundStyle(FlameColor.textSub)
-                                .lineLimit(1)
-                        }
-                        // ⚠️ 글자 바로 뒤가 아니라 **오른쪽 끝**에 붙인다. 이름 길이에 따라
-                        //    아이콘 위치가 들쭉날쭉하면 옆 카드들과 줄이 안 맞아 보인다.
-                        Spacer(minLength: 4)
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(FlameColor.primary)
-                    }
-                    .padding(.horizontal, 12)
-                    // 옆 카드(렌더러·실행)와 같은 높이. 안쪽 여백으로 높이를 정하면
-                    // 줄 수가 다른 카드끼리 몇 pt 씩 어긋난다.
-                    .frame(maxWidth: .infinity, minHeight: Self.rowHeight,
-                           maxHeight: Self.rowHeight, alignment: .leading)
-                    .flameCard(fill: FlameColor.bgDark, radius: 10)
+                // ⚠️ 표시 전용이다. 예전에는 눌러서 버전 목록이 열렸는데, 고른 버전으로
+                //    **새 인스턴스를 만드는** 동작이라 "선택된 인스턴스를 바꾼다" 로 읽혀
+                //    오해를 샀다. 새 인스턴스는 왼쪽 목록/브라우저에서 만든다.
+                //    렌더러도 여기 있었지만 인스턴스 설정으로 되돌렸다 — 이 줄은
+                //    "무엇을 · 실행" 두 가지만 말한다.
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(selected.name)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(FlameColor.textMain)
+                        .lineLimit(1)
+                    Text("MC \(selected.mcVersion) · \(selected.loaderLabel)")
+                        .font(.system(size: 11)).foregroundStyle(FlameColor.textSub)
+                        .lineLimit(1)
                 }
-                .buttonStyle(.plain)
-
-                rendererRow(for: selected)
-                    .frame(width: Sizing.isTablet ? 190 : 150)
+                .padding(.horizontal, 12)
+                // 실행 버튼과 같은 높이. 안쪽 여백으로 높이를 정하면 줄 수가 다른
+                // 카드끼리 몇 pt 씩 어긋난다.
+                .frame(maxWidth: .infinity, minHeight: Self.rowHeight,
+                       maxHeight: Self.rowHeight, alignment: .leading)
+                .flameCard(fill: FlameColor.bgDark, radius: 10)
 
                 Button(auth.isLoggedIn ? "▶  실행" : "로그인", action: onLaunch)
                     .buttonStyle(FlameButtonStyle(height: Self.rowHeight, radius: 10))
@@ -780,49 +741,6 @@ private struct InstalledPanel: View {
                 .font(.system(size: 12)).foregroundStyle(FlameColor.textSub)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 18)
-        }
-    }
-
-    /// 이 인스턴스가 실제로 쓸 렌더러. 여기서 바로 바꿀 수 있어야 한다 —
-    /// 예전에는 인스턴스 설정 화면까지 들어가야 보였는데, 셰이더가 되는지 안 되는지가
-    /// 렌더러에 달려 있어서 가장 자주 만지는 값이다.
-    @ViewBuilder
-    private func rendererRow(for meta: InstanceMeta) -> some View {
-        let current = meta.rendererId.flatMap(Renderer.init(rawValue:))
-        let effective = RendererStore.resolve(for: meta)
-
-        Menu {
-            Button { onChangeRenderer(nil) } label: {
-                Label("전역 기본 (\(RendererStore.load().displayName))",
-                      systemImage: current == nil ? "checkmark" : "")
-            }
-            ForEach(Renderer.allCases) { item in
-                Button { onChangeRenderer(item) } label: {
-                    Label("\(item.emoji) \(item.displayName)",
-                          systemImage: current == item ? "checkmark" : "")
-                }
-            }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "cpu.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(FlameColor.primary)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("렌더러").font(.system(size: 10)).foregroundStyle(FlameColor.textSub)
-                    Text(current == nil ? "\(effective.displayName) (전역 기본)" : effective.displayName)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(FlameColor.textMain)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(FlameColor.textSub)
-            }
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: Self.rowHeight,
-                   maxHeight: Self.rowHeight, alignment: .leading)
-            .flameCard(fill: FlameColor.bgDark, radius: 10)
         }
     }
 
@@ -878,12 +796,9 @@ private struct MobileBottomBar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if launcher.progress.isActive || launcher.progress.phase == .error {
-                ProgressRow(progress: launcher.progress)
-                    .padding(.horizontal, 14)
-                    .padding(.top, 8)
-            }
-
+            // ⚠️ 진행 표시는 여기 있으면 안 된다. 이 바는 설치됨 탭·태블릿에서 그리지
+            //    않는데, 모드 로더 설치는 바로 그 탭에서 시작한다 — 진척도가 통째로
+            //    사라졌다. 탭·기기와 무관하게 뜨도록 본문 쪽으로 옮겼다.
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
@@ -1026,7 +941,7 @@ private struct SectionRow: View {
             //    한 줄이 51pt 라 6줄이 346pt — 상단바를 뺀 가용 높이(약 320pt)를 넘겨
             //    마지막 두 개("온라인 LAN"·"업데이트 노트")가 화면 밖으로 밀렸다.
             //    스크롤은 되지만, 메뉴가 스크롤될 거라고 기대하는 사람은 없다.
-            .padding(.vertical, Sizing.isTablet ? 11 : 8)
+            .padding(.vertical, Sizing.isTablet ? 11 : 9)
             .frame(maxWidth: .infinity, alignment: .leading)
             .flameSelectableCard(selected: selected, radius: 10)
         }
@@ -1036,57 +951,3 @@ private struct SectionRow: View {
 
 // MARK: - 버전 변경 시트
 
-/// 설치됨 탭의 "선택됨" 카드에서 여는 버전 목록.
-///
-/// ⚠️ 기존 인스턴스의 MC 버전을 제자리에서 바꾸지 않는다 — 라이브러리·에셋·로더가 전부
-///    버전에 묶여 있어 사실상 재설치다. 고른 버전으로 **새 인스턴스를 만든다**(로더 선택으로 이어짐).
-private struct VersionPickerSheet: View {
-    let versions: [VersionEntry]
-    let onPick: (VersionEntry) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var releasesOnly = true
-
-    private var shown: [VersionEntry] {
-        releasesOnly ? versions.filter(\.isRelease) : versions
-    }
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                FlameColor.bgDark.ignoresSafeArea()
-
-                VStack(spacing: 0) {
-                    Picker("", selection: $releasesOnly) {
-                        Text("정식 출시").tag(true)
-                        Text("전체").tag(false)
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-
-                    ScrollView {
-                        LazyVStack(spacing: 6) {
-                            ForEach(shown) { version in
-                                VersionRow(version: version, selected: false)
-                                    .onTapGesture { onPick(version) }
-                            }
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.bottom, 14)
-                    }
-                    .scrollContentBackground(.hidden)
-                }
-            }
-            .navigationTitle("버전 선택")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(FlameColor.bgSurface, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("닫기") { dismiss() }.foregroundStyle(FlameColor.textSub)
-                }
-            }
-        }
-        .modifier(WidePresentation())
-    }
-}

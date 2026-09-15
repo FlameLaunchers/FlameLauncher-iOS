@@ -24,6 +24,15 @@
 # 사용:  Scripts/build-javaapp.sh [ref]
 set -euo pipefail
 
+# 패치 결과를 읽을 수 있는 diff 로 내보낸다(build-mobileglues.sh 의 같은 함수 참고).
+emit_patch() {   # emit_patch <저장소경로> <이름>
+    [ -n "${EMIT_PATCH_DIR:-}" ] || return 0
+    mkdir -p "$EMIT_PATCH_DIR"
+    git -C "$1" add -A >/dev/null 2>&1
+    git -C "$1" diff --cached > "$EMIT_PATCH_DIR/$2.patch"
+    printf '  패치 저장: %s.patch (%s줄)\n' "$2" "$(wc -l < "$EMIT_PATCH_DIR/$2.patch" | tr -d ' ')"
+}
+
 REPO="https://github.com/AngelAuraMC/Amethyst-iOS.git"
 REF="${1:-main}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -172,6 +181,8 @@ print("  GLFW.java: glfwPlatformSupported / glfwGetMonitorName"
       + (" / IME 3종" if len(sys.argv) > 2 and sys.argv[2] else ""))
 GLFWPATCH
 
+emit_patch "$WORK/src" amethyst-javaapp
+
 echo "▸ 컴파일"
 make -C "$WORK/src/JavaApp" -j"$(sysctl -n hw.ncpu)" BOOTJDK="$BOOTJDK" >/dev/null
 
@@ -179,7 +190,9 @@ BUILD="$WORK/src/JavaApp/build"
 echo "▸ FlameLauncher 자체 부트스트랩 컴파일"
 # Forge/NeoForge 프로세서를 게임 JVM 안에서 돌리는 래퍼. (JavaSrc/ 참고)
 mkdir -p "$WORK/flame"
-"$BOOTJDK/javac" -d "$WORK/flame" $(find "$ROOT/JavaSrc" -name '*.java')
+# ⚠️ FlameAllocator 는 org.lwjgl.system.MemoryUtil.MemoryAllocator 를 구현한다 —
+#    방금 만든 lwjgl.jar 을 컴파일 클래스패스에 넣어야 한다(런타임에도 같은 jar 을 쓴다).
+"$BOOTJDK/javac" -cp "$BUILD/lwjgl.jar" -d "$WORK/flame" $(find "$ROOT/JavaSrc" -name '*.java')
 # ⚠️ 매니페스트가 있어야 한다 — 이 jar 은 **자바 에이전트이기도 하다**(IosFsAgent).
 #    Premain-Class 가 없으면 -javaagent 가 조용히 실패하고, toRealPath 가 다시 막힌다.
 cat > "$WORK/agent-manifest.txt" <<'MANIFEST'

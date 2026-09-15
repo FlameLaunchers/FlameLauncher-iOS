@@ -7,8 +7,6 @@ struct AppSettings: Codable {
     var skippedUpdateVersion: String?
     /// 화면 컨트롤러 표시 여부 — 안드로이드는 SharedPreferences("flame_controller") 였다.
     var controllerVisible: Bool = true
-    /// 핫바 터치 영역 스케일. 0=자동, 1~4=마인크래프트 GUI Scale 단위.
-    var hotbarTouchScale: Int = 0
 }
 
 enum AppSettingsStore {

@@ -206,7 +206,15 @@ struct ContentDetailView: View {
     }
 
     private func install(_ file: ContentFile) async {
-        let installer = ContentInstaller { p in Task { @MainActor in progress = p } }
+        // ⚠️ 전역(launcher.progress)에도 같이 올린다. 예전에는 이 화면의 @State 에만
+        //    담았는데, 설치 중에 목록으로 돌아가거나 화면을 닫으면 **진척도가 통째로
+        //    사라졌다.** 모드 로더 설치는 몇 분씩 걸려서 그동안 멈춘 것과 구분이 안 된다.
+        let installer = ContentInstaller { p in
+            Task { @MainActor in
+                progress = p
+                launcher.progress = p
+            }
+        }
         do {
             if isPack {
                 let meta = try await installer.installModpack(
@@ -226,6 +234,7 @@ struct ContentDetailView: View {
             }
         } catch {
             progress = DownloadProgress(phase: .error, error: error.localizedDescription)
+            launcher.progress = progress
             result = error.localizedDescription
         }
     }

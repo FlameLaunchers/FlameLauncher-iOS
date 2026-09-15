@@ -163,10 +163,12 @@ struct ForgeProcessorRunner {
         if let data = try? Data(contentsOf: installProfile),
            let installData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let processors = installData["processors"] as? [[String: Any]], !processors.isEmpty {
+            let vanillaJars = Self.vanillaLibraryPaths(instanceDir: instanceDir, mcVersion: mcVersion)
             try await ForgeInstallPlanner(
                 instanceDir: instanceDir, installerJar: installerJar,
                 extracted: extracted, mcVersion: mcVersion, onProgress: onProgress
-            ).write(profile: installData, processors: processors, gameJars: Set(jars))
+            ).write(profile: installData, processors: processors,
+                    gameJars: Set(jars).union(vanillaJars))
         }
 
         let args = profile["arguments"] as? [String: Any]
@@ -177,4 +179,21 @@ struct ForgeProcessorRunner {
             gameArgs: (args?["game"] as? [Any])?.compactMap { $0 as? String } ?? []
         )
     }
+
+    /// 바닐라 version.json 이 요구하는 라이브러리(인스턴스 기준 상대경로).
+    ///
+    /// Forge·NeoForge 의 프로파일은 바닐라를 `inheritsFrom` 으로 상속받기 때문에
+    /// 공통 라이브러리(gson·guava·log4j …)를 자기 목록에 담지 않는다. "설치 전용"을
+    /// 가려낼 때 이 목록이 빠지면 게임이 실제로 쓰는 라이브러리가 제외된다.
+    static func vanillaLibraryPaths(instanceDir: URL, mcVersion: String) -> Set<String> {
+        let file = instanceDir.appending(path: "versions/\(mcVersion)/\(mcVersion).json")
+        guard let data = try? Data(contentsOf: file),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let libraries = root["libraries"] as? [[String: Any]]
+        else { return [] }
+        return Set(libraries.compactMap { lib in
+            (lib["name"] as? String).map { "libraries/\(Maven.path($0))" }
+        })
+    }
+
 }

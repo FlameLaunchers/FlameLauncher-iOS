@@ -177,7 +177,24 @@ FlameJITFlags FlameNativeGetJITFlags(BOOL refresh) {
             cachedFlags |= FlameJITFlagIsIOS26;
             if (!DeviceCanCreateRXMap()) cachedFlags |= FlameJITFlagForceMirrored;
         }
+
         if (DeviceHasTXMReal()) cachedFlags |= FlameJITFlagHasTXM;
+
+        // ⚠️ 맥('Designed for iPad')에서 ForceMirrored 를 **강제하지 말 것.**
+        //
+        //    솔깃한 이유가 있다: 맥은 MAP_JIT 을 안 내주고(EINVAL 22, 애드혹으로
+        //    allow-jit 을 붙여도 그대로), 그래서 HotSpot 의 기본 코드 캐시 경로가
+        //    막혀 JVM 이 사실상 인터프리터로 돈다 — 데이터픽서가 아이폰 293ms 대비
+        //    맥에서 60,742ms 였다. 반면 RW→mprotect RX 는 열려 있어서(cur=r-x),
+        //    미러 매핑이 딱 맞는 우회로처럼 보인다.
+        //
+        //    실제로 해보면 죽는다: EXC_BREAKPOINT (code=1).
+        //    미러 매핑을 켜면 libjvm 이 **디버거에게** 코드 캐시를 달라고 brk 를 건다.
+        //    기기에서는 StikDebug 이 UniversalJIT26.js 로 그 트랩에 답하지만, 맥에는
+        //    답해 줄 스크립트가 없다(Xcode 디버거는 그 규약을 모른다).
+        //
+        //    즉 맥에서는 어느 쪽으로도 JIT 이 안 된다. 인터프리터로 도는 것을
+        //    받아들이거나, 맥에서는 이 앱 대신 데스크톱 런처를 쓰는 수밖에 없다.
         NSLog(@"[JIT26] 계산된 JIT 플래그: 0x%X (iOS26=%d mirrored=%d TXM=%d)",
               cachedFlags,
               (cachedFlags & FlameJITFlagIsIOS26) != 0,

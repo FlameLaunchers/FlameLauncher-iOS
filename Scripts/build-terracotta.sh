@@ -36,6 +36,18 @@
 # 사용:  Scripts/build-terracotta.sh [--release]
 set -euo pipefail
 
+# ── 패치 결과를 읽을 수 있는 diff 로 내보낸다 ────────────────────────────────
+# 저장소에 "고쳐진 모듈"을 남기려면 업스트림 트리를 통째로 벤더링해야 하는데,
+# 서브모듈까지 합치면 수백 MB 다. 스크립트가 git 클론 위에서 고치므로
+# `git diff` 가 곧 우리가 만든 변경 전부다 — 그걸 파일로 남긴다.
+emit_patch() {   # emit_patch <저장소경로> <이름>
+    [ -n "${EMIT_PATCH_DIR:-}" ] || return 0
+    mkdir -p "$EMIT_PATCH_DIR"
+    git -C "$1" add -A >/dev/null 2>&1
+    git -C "$1" diff --cached > "$EMIT_PATCH_DIR/$2.patch"
+    printf '  패치 저장: %s.patch (%s줄)\n' "$2" "$(wc -l < "$EMIT_PATCH_DIR/$2.patch" | tr -d ' ')"
+}
+
 TC_REPO="https://github.com/PCL-Community/Terracotta-lib.git"
 ET_REPO="https://github.com/burningtnt/EasyTier.git"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -220,6 +232,9 @@ s = s.replace(old, "", 1)
 p.write_text(s)
 print("  src/rooms/mod.rs: 고정 태그에 없는 peer_public_key 제거")
 PATCHES
+
+emit_patch "$TC" terracotta
+emit_patch "$WORK/easytier" easytier
 
 echo "▸ 빌드 (aarch64-apple-ios, $PROFILE)"
 ( cd "$TC" && cargo build --target aarch64-apple-ios --lib ${CARGO_FLAGS[@]+"${CARGO_FLAGS[@]}"} >/dev/null )
