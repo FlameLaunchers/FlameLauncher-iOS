@@ -2,12 +2,11 @@
 
 # 🔥 FlameLauncher for iOS
 
-**아이폰·아이패드에서 마인크래프트 자바 에디션을 실행하는 런처.**
-앱 프로세스 안에 진짜 OpenJDK 를 띄웁니다.
+**아이폰·아이패드에서 마인크래프트 자바 에디션을 실행합니다.**
 
-[![Platform](https://img.shields.io/badge/iOS-17.0%2B-000000?logo=apple&logoColor=white)](#)
-[![Arch](https://img.shields.io/badge/arch-arm64-orange)](#)
-[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
+[![iOS](https://img.shields.io/badge/iOS-17.0%2B-000000?logo=apple&logoColor=white)](#)
+[![arm64](https://img.shields.io/badge/arch-arm64-orange)](#)
+[![AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
 **[🇰🇷 한국어](#-한국어)** · **[🇺🇸 English](#-english)**
 
@@ -18,260 +17,180 @@
 
 # 🇰🇷 한국어
 
-> 베드락이 아닌 **자바 에디션** 입니다. PC 서버에 그대로 접속하고, PC 모드를 그대로 씁니다.
+## 1. 무엇을 할 수 있나
 
-## 목차
+베드락이 아닌 **자바 에디션**입니다. PC 서버에 그대로 접속하고, PC 모드를 그대로 씁니다.
+앱 프로세스 안에 진짜 OpenJDK 를 띄우는 방식이라 에뮬레이터가 아닙니다.
 
-- [무엇을 할 수 있나](#무엇을-할-수-있나)
-- [설치하기](#설치하기)
-- [JIT 켜기 — 가장 중요한 부분](#jit-켜기--가장-중요한-부분)
-- [처음 실행하기](#처음-실행하기)
-- [화면 안내](#화면-안내)
-- [렌더러 고르기](#렌더러-고르기)
-- [셰이더](#셰이더)
-- [온라인 LAN](#온라인-lan)
-- [자주 겪는 문제](#자주-겪는-문제)
-- [개발자용 빌드](#개발자용-빌드)
-- [동작 원리](#동작-원리)
-- [라이선스](#라이선스)
-
----
-
-## 무엇을 할 수 있나
+### 버전과 모드
 
 | | |
 |---|---|
-| **바닐라** | 1.7 ~ **26.2** 전부 |
+| **바닐라** | 1.7 ~ **26.2** |
 | **모드 로더** | Fabric · Forge · NeoForge · Quilt |
-| **모드팩** | CurseForge · Modrinth 에서 바로 설치 (의존 모드 자동 설치) |
-| **셰이더** | Iris — 물 반사·그림자·광원까지 |
-| **계정** | 마이크로소프트 정품 로그인 |
-| **멀티플레이** | 일반 서버 접속 + 방 코드로 함께 하기 |
-| **조작** | 화면 버튼(직접 배치) · 물리 키보드 · 게임패드 |
+| **모드·모드팩** | CurseForge · Modrinth 에서 검색해 바로 설치 |
+| **의존성** | 필요한 모드를 **자동으로 같이 설치**합니다 |
 
-**게임 파일은 들어 있지 않습니다.** 본인 계정으로 Mojang 서버에서 직접 받습니다.
+### 그래픽
 
-### 필요한 것
+| | |
+|---|---|
+| **셰이더** | Iris — 물 반사 · 그림자 · 광원 |
+| **렌더러** | MobileGlues(기본, 셰이더용) · Zink · GL4ES(구버전용) |
+| **해상도** | 25~100% 조절. 낮추면 프레임이 올라갑니다 |
 
-- **iOS 17.0 이상**, arm64 기기 (아이폰 XS 이후 / 2018년 이후 아이패드)
-- **마인크래프트 자바 에디션 정품 계정**
-- **여유 공간 3GB 이상** — 앱 1GB + 게임·자바 런타임
-- **컴퓨터 한 대** — JIT 를 켜기 위한 최초 1회 페어링용 (아래 참고)
+인스턴스마다 렌더러를 따로 정할 수 있습니다. 셰이더를 쓰려면 **MobileGlues** 여야 합니다.
+
+### 조작
+
+- **화면 버튼** — 위치·크기를 직접 배치합니다 (`키보드 편집`)
+- **물리 키보드** — 연결하면 바로 잡힙니다
+- **게임패드** — 스틱·트리거까지 매핑됩니다
+- **인게임 메뉴** — 실행 중에 해상도·핫바 크기를 바꿀 수 있습니다
+
+### 멀티플레이
+
+일반 서버 접속은 물론, **온라인 LAN** 으로 서버 없이 친구와 함께 할 수 있습니다.
+방을 열면 코드가 나오고, 친구는 그 코드로 들어옵니다.
+
+### 계정
+
+마이크로소프트 정품 로그인만 지원합니다. **게임 파일은 앱에 들어 있지 않고**,
+본인 계정으로 Mojang 서버에서 직접 받습니다.
 
 ---
 
-## 설치하기
+## 2. 실행 방법
 
-앱스토어에는 없습니다. 사이드로드해야 하고, **서명 방식이 JIT 가능 여부를 결정**합니다.
-이게 이 런처에서 가장 중요한 선택입니다.
+### 준비물
 
-| 방법 | iOS | JIT | 재서명 주기 |
-|---|---|---|---|
-| **SideStore** (권장) | 17.0+ | ✅ 자동 | 7일 (기기가 알아서 갱신) |
-| **AltStore** | 17.0+ | ✅ 자동 | 7일 (컴퓨터 필요) |
-| **TrollStore** | ~17.0 | ✅ 즉시 | **영구** |
-| **Xcode 직접 설치** | 17.0+ | ✅ | 7일 |
-| 배포 인증서 서명 서비스 | — | ❌ **불가** | — |
+| | |
+|---|---|
+| **iOS 17.0 이상** | arm64 기기 (아이폰 XS 이후 / 2018년 이후 아이패드) |
+| **여유 공간 3GB** | 앱 1GB + 게임·자바 런타임 |
+| **정품 계정** | 마인크래프트 자바 에디션 |
 
-> ⚠️ **UDID 를 안 쓰는 서명 서비스는 쓰면 안 됩니다.** 그런 곳은 배포(distribution)
-> 인증서로 서명하는데, 그러면 앱에 `get-task-allow` 가 없어서 **디버거를 붙일 수 없고
-> JIT 가 영영 안 켜집니다.** 게임이 부팅 도중에 멈춥니다.
-> 개발(development) 인증서여야 하고, **무료 Apple ID 로도 됩니다.**
+### 2-1. JIT 를 먼저 이해해야 합니다
 
-### SideStore 로 설치 (권장)
+**iOS 는 앱이 실행 중에 기계어를 만드는 것을 막습니다.** 자바가 바로 그 방식으로 도는
+언어라(JIT 컴파일), 이걸 풀지 않으면 게임이 부팅 도중에 멈춥니다.
 
-1. [SideStore](https://sidestore.io) 를 설치하고 Apple ID 로 로그인합니다
+푸는 방법은 **디버거를 붙이는 것** 하나뿐이고, 앱이 스스로는 못 합니다.
+
+> ⚠️ **그래서 설치 방법이 곧 JIT 가능 여부를 결정합니다.**
+> **UDID 를 안 받는 서명 서비스는 절대 쓰지 마세요.** 그런 곳은 배포(distribution)
+> 인증서로 서명하는데, 그러면 앱에 `get-task-allow` 가 없어서 **디버거를 아예 붙일 수
+> 없습니다.** 어떤 도구로도 JIT 가 안 켜집니다.
+> 개발(development) 인증서여야 하며 **무료 Apple ID 로도 됩니다.**
+
+### 2-2. TrollStore — 가장 편한 길 (iOS 17.0 이하)
+
+되는 기기라면 **이게 답입니다.**
+
+1. [TrollStore](https://github.com/opa334/TrollStore) 를 설치합니다
 2. [Releases](https://github.com/FlameLaunchers/FlameLauncher-iOS/releases) 에서 `.ipa` 를 받습니다
-3. SideStore → `+` → 받은 `.ipa` 선택
-4. SideStore 의 **Enable JIT** 를 FlameLauncher 에 켜 둡니다
+3. `.ipa` 를 TrollStore 로 엽니다
 
-### TrollStore 로 설치 (iOS 17.0 이하)
+**끝입니다.** 7일 재서명도, JIT 도구도, 컴퓨터도 필요 없습니다. TrollStore 가 영구 서명을
+해주고 JIT 도 자체 API 로 즉시 켜집니다. 런처가 알아서 호출하므로 손댈 게 없습니다.
 
-`.ipa` 를 TrollStore 로 열기만 하면 됩니다. **7일 재서명도, JIT 도구도 필요 없습니다** —
-가장 편한 방법이지만 지원하는 iOS 버전이 제한적입니다.
+단점은 지원 범위입니다 — TrollStore 는 **iOS 17.0 까지**만 됩니다. 그 위 버전이면 아래로.
 
----
+### 2-3. StikDebug — iOS 17.4 ~ 26
 
-## JIT 켜기 — 가장 중요한 부분
+TrollStore 가 안 되는 기기에서 가장 편한 길입니다. 컴퓨터는 **최초 1회만** 필요합니다.
 
-**iOS 는 앱이 실행 중에 기계어를 만드는 것을 막습니다.** 자바는 정확히 그 방식으로
-도는 언어라(JIT 컴파일), 이걸 풀어주지 않으면 게임이 부팅 중에 멈춥니다.
+**설치**
 
-풀어주는 유일한 방법은 **디버거를 붙이는 것**입니다. 앱이 스스로는 못 합니다.
+1. [SideStore](https://sidestore.io) 또는 [AltStore](https://altstore.io) 로 `.ipa` 를 설치합니다
+2. [StikDebug](https://github.com/StephenDev0/StikDebug) 를 설치합니다
 
-### 기기만으로 (iOS 17.4 ~ 26) — StikDebug
+**페어링 (최초 1회)**
 
-가장 편한 방법입니다. **최초 1회만** 컴퓨터로 페어링 파일을 만들면, 이후로는 기기 안에서 끝납니다.
+3. 컴퓨터에 기기를 연결해 **페어링 파일**을 만듭니다 (StikDebug 안내를 따르세요)
+4. 만든 파일을 StikDebug 에 넣습니다
 
-1. [StikDebug](https://github.com/StephenDev0/StikDebug) 설치
-2. 컴퓨터에서 페어링 파일을 만들어 StikDebug 에 넣습니다 (StikDebug 안내를 따르세요)
-3. **끝.** 다음부터는 FlameLauncher 를 열면 StikDebug 로 잠깐 전환됐다가 자동으로 돌아옵니다
+**이후로는**
 
-> 런처가 JIT 스크립트까지 같이 보내므로 StikDebug 에서 따로 고를 필요가 없습니다.
+5. FlameLauncher 를 열면 StikDebug 로 잠깐 전환됐다가 **자동으로 돌아옵니다**
 
-### iOS 17.0 ~ 17.3 — SideJITServer
+런처가 JIT 스크립트까지 같이 보내므로 StikDebug 안에서 따로 고를 것이 없습니다.
+컴퓨터는 3번 이후로 필요 없습니다.
 
-컴퓨터에서 [SideJITServer](https://github.com/nythepegasus/SideJITServer) 를 띄우고
-기기와 같은 Wi-Fi 에 두면 됩니다.
+### 2-4. 그 밖의 경로
 
-### AltStore / SideStore 를 쓴다면
+| 상황 | 방법 |
+|---|---|
+| **iOS 17.0 ~ 17.3** | [SideJITServer](https://github.com/nythepegasus/SideJITServer) — 컴퓨터에서 띄우고 같은 Wi-Fi |
+| **AltStore / SideStore 사용 중** | 앱 목록에서 **Enable JIT** — 컴퓨터의 AltServer 와 같은 Wi-Fi |
+| **개발자** | Xcode 로 연결한 채 실행 |
 
-앱 목록에서 FlameLauncher 옆의 **Enable JIT** 를 누르면 됩니다.
-컴퓨터의 AltServer 와 같은 Wi-Fi 에 있어야 합니다.
-
-### ⚠️ 버전을 바꿀 때마다 다시 켜야 합니다
-
-자바 가상머신은 **앱 실행당 한 번만** 뜹니다. 다른 버전으로 넘어가려면 앱을 완전히
-종료했다 열어야 하고, JIT 는 프로세스 속성이라 새 프로세스에는 디버거를 다시 붙여야 합니다.
-**iOS 의 구조적 제약이라 우회할 수 없습니다.**
-
-대신 다시 열었을 때 **고르던 버전으로 바로 이어지게** 해 뒀습니다. 앱만 다시 열면
-나머지는 알아서 진행됩니다.
-
----
-
-## 처음 실행하기
+### 2-5. 첫 실행
 
 1. **로그인** — 오른쪽 위 아바타 → 마이크로소프트 계정
-2. **버전 고르기** — 왼쪽 메뉴 `인스턴스 선택` → 위쪽 `정식` 탭에서 원하는 버전
-3. **모드 로더 선택** — 바닐라 / Fabric / Forge / NeoForge 중에서
-4. **다운로드 대기** — 게임 파일과 자바 런타임을 받습니다 (첫 실행만, 5~15분)
+2. **버전 고르기** — 왼쪽 메뉴 `인스턴스 선택` → `정식` 탭
+3. **모드 로더 선택** — 바닐라 / Fabric / Forge / NeoForge
+4. **다운로드** — 게임 파일과 자바 런타임 (첫 실행만, 5~15분)
 5. **실행** — `설치됨` 탭에서 고른 뒤 `▶ 실행`
 
----
-
-## 화면 안내
-
-왼쪽 메뉴가 전부입니다.
-
-| 메뉴 | 하는 일 |
-|---|---|
-| **인스턴스 선택** | 설치한 버전 목록, 새 버전 설치, 실행 |
-| **모드팩 설치** | CurseForge · Modrinth 검색·설치 |
-| **옵션 · 렌더러** | 메모리·해상도·렌더러, 전역 기본값 |
-| **키보드 편집** | 화면 버튼 위치·크기 직접 배치 |
-| **온라인 LAN** | 방 코드로 함께 하기 |
-| **업데이트 노트** | 최신 소식 |
-
-`설치됨` 탭 아래 띠에서 **버전 · 렌더러 · 실행**을 한 줄로 조작합니다.
-렌더러는 여기서 바로 바꿀 수 있습니다 — 셰이더가 되고 안 되고가 여기 달려 있어서
-가장 자주 만지는 값입니다.
-
----
-
-## 렌더러 고르기
-
-| | 언제 쓰나 |
-|---|---|
-| **MobileGlues** | **기본값.** 셰이더를 쓰려면 이것뿐입니다. 1.17 이상 권장 |
-| **Zink (MoltenVK)** | Vulkan 경유. MobileGlues 가 안 될 때 |
-| **GL4ES** | 구버전(1.12 이하) 부팅용 |
-
-인스턴스마다 따로 정할 수 있고, 안 정하면 전역 기본값을 씁니다.
-
----
-
-## 셰이더
-
-**MobileGlues 렌더러 + Iris** 조합만 됩니다.
+### 2-6. 셰이더 켜기
 
 1. 인스턴스에 **Fabric** 을 설치합니다
-2. `모드팩 설치` 에서 **Iris Shaders** 를 설치합니다 (의존 모드는 자동으로 같이 깔립니다)
-3. 실행 후 게임 안 `설정 → 그래픽 → Shader Packs` 에서 셰이더팩을 넣습니다
+2. `모드팩 설치` 에서 **Iris Shaders** 를 설치합니다 (의존 모드는 자동으로 같이)
+3. 렌더러가 **MobileGlues** 인지 확인합니다 (`설치됨` 탭 아래 띠)
+4. 게임 안 `설정 → 그래픽 → Shader Packs`
 
-> 무거운 셰이더는 아이폰에서 버겁습니다. 가벼운 것(Complementary, BSL 저설정)부터 시작하세요.
+무거운 셰이더는 버겁습니다. 가벼운 것(Complementary, BSL 저설정)부터 시작하세요.
 
----
+### 2-7. 버전을 바꿀 때
 
-## 온라인 LAN
+자바 가상머신은 **앱 실행당 한 번만** 뜹니다. 다른 버전으로 넘어가려면 앱을 완전히
+종료했다 열어야 하고, JIT 는 프로세스 속성이라 **새 프로세스에는 디버거를 다시 붙여야
+합니다.** iOS 의 구조적 제약이라 우회할 수 없습니다.
 
-친구와 같은 월드에서 놀 때 씁니다. 서버를 따로 빌릴 필요가 없습니다.
+대신 안내창에서 `지금 종료` 를 누르면, **다시 열었을 때 그 버전으로 바로 이어집니다.**
+앱만 다시 열면 나머지는 알아서 진행됩니다.
 
-**방을 여는 쪽**
-1. 게임에 들어가 월드를 연 뒤 `ESC → LAN 에 공개`
-2. 런처의 `온라인 LAN` → `방 열기`
-3. 나온 **방 코드**를 친구에게 알려줍니다
+### 2-8. 안 될 때
 
-**참가하는 쪽**
-1. `온라인 LAN` → 방 코드 입력 → `참가`
-2. 화면에 나온 **주소를 복사**해서 게임의 `멀티플레이 → 서버 추가` 에 붙여넣습니다
-
-> ⚠️ 참가할 때 서버 목록에 자동으로 뜨지 않습니다. iOS 는 앱이 가상 네트워크 장치를
-> 만드는 것을 허용하지 않아서(그 권한은 유료 개발자 계정 전용) 주소를 직접 넣어야 합니다.
-> **방을 여는 쪽은 제약 없이 동작합니다.**
-
----
-
-## 자주 겪는 문제
-
-**"JIT 가 필요합니다" 에서 안 넘어감**
-→ 위 [JIT 켜기](#jit-켜기--가장-중요한-부분) 를 확인하세요. 화면의 `진단 정보` 를 펼치면
-정확한 사유가 나옵니다. 서명이 배포 인증서면 **어떤 방법으로도 안 됩니다** — 다시 서명해야 합니다.
-
-**다른 버전을 눌러도 실행이 안 됨**
-→ 앱을 완전히 종료했다 여세요. 안내창의 `지금 종료` 를 누르면 다시 열었을 때 그 버전으로 이어집니다.
-
-**게임 중 갑자기 꺼짐**
-→ 메모리 부족일 가능성이 큽니다. `옵션` 에서 **렌더 거리를 낮추고**, 셰이더를 쓴다면
-가벼운 것으로 바꿔보세요. 고해상도 리소스팩은 특히 무겁습니다.
-
-**26.3 스냅샷이 실행 안 됨**
-→ 마인크래프트가 윈도잉 라이브러리를 GLFW 에서 SDL3 로 바꿨습니다. 이 런처는 GLFW 를
-가로채는 구조라 아직 대응이 안 됩니다. **최신 정식(26.2)은 정상 동작합니다.**
-
-**실행하면 세로로 돌아감**
-→ 최신 버전에서 고쳐졌습니다. 업데이트해주세요.
+| 증상 | 확인할 것 |
+|---|---|
+| "JIT 가 필요합니다" 에서 멈춤 | 화면의 `진단 정보` 를 펼치세요. 배포 인증서 서명이면 **재서명 외에 방법이 없습니다** |
+| 실행하자마자 꺼짐 | JIT 가 안 켜진 상태입니다. 위 2-1 부터 확인하세요 |
+| 게임 중 꺼짐 | 메모리 부족입니다. 렌더 거리를 낮추고, 가벼운 셰이더로 바꿔보세요 |
+| 다른 버전 실행이 안 됨 | 위 2-7 참고 — 앱을 완전히 종료했다 여세요 |
+| 26.3 스냅샷이 안 됨 | 마인크래프트가 GLFW 를 SDL3 로 교체했습니다. 미대응이며 **26.2 는 정상입니다** |
+| 온라인 LAN 참가가 안 보임 | iOS 는 가상 네트워크 장치를 못 만듭니다. 화면의 주소를 **직접 입력**하세요 (방 열기는 정상 동작) |
 
 ---
 
-## 개발자용 빌드
+## 3. 라이선스
 
-```bash
-brew install xcodegen
-git clone https://github.com/FlameLaunchers/FlameLauncher-iOS.git
-cd FlameLauncher-iOS
+**[AGPL-3.0](LICENSE)** 입니다. 선택이 아니라 의무입니다.
 
-./Scripts/fetch-runtime.sh     # 렌더러 · LWJGL · JRE (약 350MB)
-xcodegen generate              # project.yml → .xcodeproj
-open FlameLauncher.xcodeproj
-```
+결합 저작물의 라이선스는 **가장 강한 카피레프트**가 정하는데, 이 앱이 정적 링크하는
+Terracotta 가 AGPL-3.0 입니다.
 
-네이티브를 직접 빌드하려면 **[FlameLauncher-Natives](https://github.com/FlameLaunchers/FlameLauncher-Natives)**
-를 쓰세요 — MobileGlues · Terracotta · LWJGL 3.4.1 을 iOS 용으로 빌드하는 스크립트와
-패치가 그쪽에 있습니다.
+| 구성 요소 | 라이선스 | 쓰이는 방식 |
+|---|---|---|
+| **Terracotta** | **AGPL-3.0** | `libterracotta.a` 정적 링크 (온라인 LAN) |
+| Amethyst-iOS / PojavLauncher | GPL-3.0 | JavaApp · 네이티브 브릿지 · 패치된 LWJGL/GLFW |
+| EasyTier | LGPL-3.0 | Terracotta 내부 |
+| MobileGlues | LGPL-2.1-only | 렌더러 `libmobileglues.dylib` |
+| LWJGL | BSD-3-Clause | 3.3.3 · 3.4.1 두 스택 |
+| OpenJDK (Temurin) | GPL-2.0 + Classpath Exception | 번들 JRE |
 
-> **시뮬레이터에서는 게임이 실행되지 않습니다.** JRE·렌더러가 전부 기기용 arm64 바이너리라
-> 시뮬레이터가 `dlopen` 하는 순간 코드서명 검증에 걸려 프로세스가 SIGKILL 로 죽습니다.
-> UI 작업은 시뮬레이터에서, 실제 실행은 기기에서 하면 됩니다.
+GPL-3.0 코드는 AGPL-3.0 저작물에 결합할 수 있고(GPLv3 13조가 명시적으로 허용),
+결과물은 AGPL-3.0 으로 배포해야 합니다.
 
----
+업스트림에 가한 수정은 이 저장소에 사본으로 두지 않고, 전부 빌드 시점에 스크립트가
+적용합니다. 그 패치와 업스트림별 라이선스 전문은
+**[FlameLauncher-Natives](https://github.com/FlameLaunchers/FlameLauncher-Natives)** 에 있습니다.
 
-## 동작 원리
+자세한 내용은 [NOTICE](NOTICE) 를 보세요.
 
-```
-SwiftUI 런처
-    ↓ JLI_Launch
-OpenJDK (앱 프로세스 안)
-    ↓ LWJGL 3.3.3 / 3.4.1
-GLFW 구현 (자바로 다시 씀 — 터치·게임패드를 키 이벤트로)
-    ↓ OpenGL
-MobileGlues (데스크톱 GL → GLES 번역)
-    ↓
-ANGLE → Metal → GPU
-```
-
-**LWJGL 두 벌을 들고 있습니다.** 마인크래프트 26.2 가 LWJGL 3.4.1 을 쓰는데 3.3.3 과
-섞을 수 없습니다(콜백 인프라가 새로 생겨 자바와 네이티브가 같은 버전이어야 합니다).
-버전 JSON 의 라이브러리 목록을 읽어 자동으로 고릅니다.
-
----
-
-## 라이선스
-
-**AGPL-3.0.** 선택이 아니라 의무입니다 — 정적 링크하는 테라코타가 AGPL-3.0 이고,
-결합 저작물의 라이선스는 가장 강한 카피레프트가 정합니다. 전체 구성 요소는 [NOTICE](NOTICE) 참조.
-
-> Minecraft 는 Mojang AB 의 상표입니다. 이 프로젝트는 Mojang AB · Microsoft 와 아무 관련이 없습니다.
+> Minecraft 는 Mojang AB 의 상표입니다. 이 프로젝트는 Mojang AB · Microsoft 와
+> 아무 관련이 없습니다.
 
 <div align="right"><a href="#-flamelauncher-for-ios">⬆ 맨 위로</a></div>
 
@@ -280,268 +199,178 @@ ANGLE → Metal → GPU
 
 # 🇺🇸 English
 
-> This is **Java Edition**, not Bedrock. Join the same servers your PC friends use,
-> run the same mods.
+## 1. What it does
 
-## Contents
+This is **Java Edition**, not Bedrock. Join the servers your PC friends use, run the mods
+they run. A real OpenJDK boots inside the app process — this is not an emulator.
 
-- [What it does](#what-it-does)
-- [Installing](#installing)
-- [Enabling JIT — the part that matters](#enabling-jit--the-part-that-matters)
-- [First run](#first-run)
-- [Getting around](#getting-around)
-- [Choosing a renderer](#choosing-a-renderer)
-- [Shaders](#shaders)
-- [Online LAN](#online-lan)
-- [Troubleshooting](#troubleshooting)
-- [Building it yourself](#building-it-yourself)
-- [How it works](#how-it-works)
-- [Licence](#licence)
-
----
-
-## What it does
+### Versions and mods
 
 | | |
 |---|---|
 | **Vanilla** | 1.7 through **26.2** |
 | **Mod loaders** | Fabric · Forge · NeoForge · Quilt |
-| **Modpacks** | Install straight from CurseForge and Modrinth (dependencies resolved automatically) |
-| **Shaders** | Iris — reflections, shadows, coloured light |
-| **Account** | Microsoft sign-in |
-| **Multiplayer** | Normal servers, plus room-code play with friends |
-| **Controls** | On-screen buttons you lay out yourself · hardware keyboard · gamepad |
+| **Mods and modpacks** | Search and install straight from CurseForge and Modrinth |
+| **Dependencies** | Required mods are **installed alongside automatically** |
 
-**No game files ship with this app.** You download them from Mojang's own servers with
-your own account.
+### Graphics
+
+| | |
+|---|---|
+| **Shaders** | Iris — reflections, shadows, coloured light |
+| **Renderers** | MobileGlues (default, the one shaders need) · Zink · GL4ES (old versions) |
+| **Resolution** | 25–100%; lowering it buys frames |
+
+The renderer is per-instance. Shaders require **MobileGlues**.
+
+### Controls
+
+- **On-screen buttons** — you place and size them yourself
+- **Hardware keyboard** — picked up as soon as it connects
+- **Gamepad** — sticks and triggers included
+- **In-game menu** — change resolution and hotbar size while playing
+
+### Multiplayer
+
+Ordinary servers, plus **Online LAN** for playing with a friend without renting a server:
+open a room, share the code, they join with it.
+
+### Account
+
+Microsoft sign-in only. **No game files ship with the app** — you download them from
+Mojang's own servers with your own account.
+
+---
+
+## 2. Running it
 
 ### What you need
 
-- **iOS 17.0 or later**, arm64 device (iPhone XS onward, 2018-or-later iPad)
-- **A paid Minecraft Java Edition account**
-- **3 GB free space** — 1 GB app plus the game and a Java runtime
-- **A computer**, once, to pair for JIT (see below)
+| | |
+|---|---|
+| **iOS 17.0 or later** | arm64 device (iPhone XS onward, 2018-or-later iPad) |
+| **3 GB free** | 1 GB app plus the game and a Java runtime |
+| **A paid account** | Minecraft Java Edition |
 
----
+### 2-1. Understand JIT first
 
-## Installing
+**iOS forbids apps from generating machine code at runtime.** Java runs exactly that way
+(JIT compilation), so without lifting that restriction the game stalls partway through boot.
 
-Not on the App Store. You sideload it, and **how you sign it decides whether JIT can
-work** — which is the single most important choice here.
+The only way to lift it is to **attach a debugger**, and an app cannot do that to itself.
 
-| Method | iOS | JIT | Re-sign |
-|---|---|---|---|
-| **SideStore** (recommended) | 17.0+ | ✅ automatic | 7 days, on-device |
-| **AltStore** | 17.0+ | ✅ automatic | 7 days, needs a computer |
-| **TrollStore** | up to 17.0 | ✅ instant | **never** |
-| **Xcode direct install** | 17.0+ | ✅ | 7 days |
-| Distribution-cert signing services | — | ❌ **impossible** | — |
-
-> ⚠️ **Avoid signing services that don't ask for your UDID.** Those sign with a
-> *distribution* certificate, which strips `get-task-allow` — no debugger can attach, so
-> **JIT can never be enabled** and the game stops partway through boot.
+> ⚠️ **So how you install decides whether JIT can ever work.**
+> **Never use a signing service that doesn't ask for your UDID.** Those sign with a
+> *distribution* certificate, which strips `get-task-allow` — **no debugger can attach at
+> all**, and no tool will enable JIT.
 > You need a *development* certificate. **A free Apple ID is fine.**
 
-### With SideStore (recommended)
+### 2-2. TrollStore — the easiest path (iOS 17.0 and below)
 
-1. Install [SideStore](https://sidestore.io) and sign in with your Apple ID
+If your device supports it, **this is the answer.**
+
+1. Install [TrollStore](https://github.com/opa334/TrollStore)
 2. Download the `.ipa` from [Releases](https://github.com/FlameLaunchers/FlameLauncher-iOS/releases)
-3. SideStore → `+` → pick the `.ipa`
-4. Turn on **Enable JIT** for FlameLauncher
+3. Open the `.ipa` with TrollStore
 
-### With TrollStore (iOS 17.0 and below)
+**Done.** No weekly re-signing, no JIT tool, no computer. TrollStore signs permanently and
+enables JIT through its own API, which the launcher calls for you.
 
-Just open the `.ipa` with TrollStore. **No weekly re-signing, no JIT tool** — easily the
-most comfortable route, but only on the iOS versions TrollStore supports.
+The catch is coverage: TrollStore only goes up to **iOS 17.0**. Above that, read on.
 
----
+### 2-3. StikDebug — iOS 17.4 to 26
 
-## Enabling JIT — the part that matters
+The most comfortable path where TrollStore isn't available. A computer is needed **once**.
 
-**iOS forbids apps from generating machine code at runtime.** That is exactly how Java
-runs (JIT compilation), so without lifting that restriction the game stalls during boot.
+**Install**
 
-The only way to lift it is to **attach a debugger**. An app cannot do it to itself.
+1. Install the `.ipa` with [SideStore](https://sidestore.io) or [AltStore](https://altstore.io)
+2. Install [StikDebug](https://github.com/StephenDev0/StikDebug)
 
-### On-device only (iOS 17.4 – 26) — StikDebug
+**Pair (once)**
 
-The most convenient route. You need a computer **once**, to create a pairing file; after
-that everything happens on the device.
+3. Connect the device to a computer and create a **pairing file** (follow StikDebug's guide)
+4. Load that file into StikDebug
 
-1. Install [StikDebug](https://github.com/StephenDev0/StikDebug)
-2. Create a pairing file on a computer and load it into StikDebug (follow StikDebug's guide)
-3. **Done.** From then on, opening FlameLauncher briefly switches to StikDebug and returns
-   automatically
+**From then on**
 
-> The launcher sends the JIT script along with the request, so there is nothing to pick
-> inside StikDebug.
+5. Opening FlameLauncher briefly switches to StikDebug and **returns automatically**
 
-### iOS 17.0 – 17.3 — SideJITServer
+The launcher sends the JIT script along with the request, so there is nothing to pick
+inside StikDebug. The computer is not needed again after step 3.
 
-Run [SideJITServer](https://github.com/nythepegasus/SideJITServer) on a computer and keep
-the device on the same Wi-Fi.
+### 2-4. Other routes
 
-### If you use AltStore / SideStore
+| Situation | Method |
+|---|---|
+| **iOS 17.0 – 17.3** | [SideJITServer](https://github.com/nythepegasus/SideJITServer) — run it on a computer, same Wi-Fi |
+| **Already on AltStore / SideStore** | **Enable JIT** in the app list — same Wi-Fi as your AltServer |
+| **Developers** | Run with Xcode attached |
 
-Press **Enable JIT** next to FlameLauncher in the app list. Your computer's AltServer must
-be on the same Wi-Fi.
-
-### ⚠️ You re-enable it every time you switch versions
-
-A Java virtual machine starts **once per app launch**. Moving to a different version means
-fully quitting and reopening the app, and because JIT is a property of the *process*, the
-new process needs a debugger attached again. **This is structural to iOS and cannot be
-worked around.**
-
-What we did instead: reopening the app **resumes straight into the version you picked**.
-Just reopen it and the rest happens on its own.
-
----
-
-## First run
+### 2-5. First run
 
 1. **Sign in** — avatar, top right → Microsoft account
-2. **Pick a version** — left menu `인스턴스 선택` → `정식` tab
+2. **Pick a version** — left menu → the release tab
 3. **Pick a loader** — vanilla, Fabric, Forge or NeoForge
-4. **Wait for the download** — game files and a Java runtime, first time only, 5–15 minutes
-5. **Play** — select it under the installed tab and press `▶`
+4. **Download** — game files and a Java runtime; first time only, 5–15 minutes
+5. **Play** — select it under the installed tab and press play
 
----
-
-## Getting around
-
-The left menu is the whole app.
-
-| Menu | What it does |
-|---|---|
-| **인스턴스 선택** | Installed versions, install new ones, launch |
-| **모드팩 설치** | Search and install from CurseForge · Modrinth |
-| **옵션 · 렌더러** | Memory, resolution, renderer defaults |
-| **키보드 편집** | Lay out the on-screen buttons yourself |
-| **온라인 LAN** | Room-code multiplayer |
-| **업데이트 노트** | Release notes |
-
-The strip under the installed list holds **version · renderer · play** on one row. The
-renderer is right there because it decides whether shaders work — it is the setting you
-touch most.
-
----
-
-## Choosing a renderer
-
-| | When |
-|---|---|
-| **MobileGlues** | **Default.** The only one shaders work on. Best on 1.17+ |
-| **Zink (MoltenVK)** | Via Vulkan. Try it when MobileGlues misbehaves |
-| **GL4ES** | For booting old versions (1.12 and below) |
-
-Set per instance, or leave it to follow the global default.
-
----
-
-## Shaders
-
-Only **MobileGlues + Iris** works.
+### 2-6. Turning on shaders
 
 1. Install **Fabric** on the instance
-2. Install **Iris Shaders** from `모드팩 설치` — its dependencies come along automatically
-3. In game, `Options → Video Settings → Shader Packs`
+2. Install **Iris Shaders** from the modpack browser — dependencies come along
+3. Check the renderer is **MobileGlues** (the strip under the installed list)
+4. In game: `Options → Video Settings → Shader Packs`
 
-> Heavy packs are a lot to ask of a phone. Start with something light — Complementary, or
-> BSL on low.
+Heavy packs are a lot to ask of a phone. Start light — Complementary, or BSL on low.
 
----
+### 2-7. Switching versions
 
-## Online LAN
+A Java virtual machine starts **once per app launch**. Moving to a different version means
+fully quitting and reopening, and because JIT is a property of the *process*, the new
+process **needs a debugger attached again**. This is structural to iOS and cannot be
+worked around.
 
-Play in the same world as a friend without renting a server.
+What we did instead: choosing `지금 종료` in the prompt makes the app **resume straight
+into that version** when you reopen it. Reopen the app and the rest happens on its own.
 
-**Hosting**
-1. Open a world in game, then `ESC → Open to LAN`
-2. Launcher → `온라인 LAN` → open a room
-3. Share the **room code**
+### 2-8. When it doesn't work
 
-**Joining**
-1. `온라인 LAN` → enter the room code → join
-2. **Copy the address** shown and paste it into `Multiplayer → Add Server`
-
-> ⚠️ When joining, the world does not appear in the server list on its own. iOS does not
-> let apps create a virtual network device — that entitlement is paid-account only — so
-> the address goes in by hand. **Hosting has no such limitation.**
-
----
-
-## Troubleshooting
-
-**Stuck on "JIT is required"**
-→ See [Enabling JIT](#enabling-jit--the-part-that-matters). Expand `진단 정보` on that
-screen for the exact reason. If the app was signed with a distribution certificate,
-**no method will work** — it has to be re-signed.
-
-**Tapping play on a different version does nothing**
-→ Fully quit and reopen. Choosing `지금 종료` in the prompt makes the app resume into that
-version when you reopen it.
-
-**Crashes mid-game**
-→ Most likely memory. Lower the **render distance** in options, and switch to a lighter
-shader pack if you use one. High-resolution resource packs are especially expensive.
-
-**26.3 snapshots won't run**
-→ Minecraft swapped its windowing library from GLFW to SDL3. This launcher intercepts
-GLFW, so that path no longer applies. **The current release, 26.2, works fine.**
-
-**The app rotates to portrait**
-→ Fixed in the latest build. Please update.
+| Symptom | What to check |
+|---|---|
+| Stuck on "JIT is required" | Expand the diagnostics on that screen. If it was signed with a distribution certificate, **re-signing is the only fix** |
+| Quits immediately on launch | JIT is not enabled. Start from 2-1 |
+| Crashes mid-game | Out of memory. Lower render distance, switch to a lighter shader pack |
+| Play does nothing on another version | See 2-7 — fully quit and reopen |
+| 26.3 snapshots won't run | Minecraft swapped GLFW for SDL3. Unsupported; **26.2 works fine** |
+| Joining an Online LAN room shows nothing | iOS cannot create a virtual network device. **Type the address in by hand** (hosting works normally) |
 
 ---
 
-## Building it yourself
+## 3. Licence
 
-```bash
-brew install xcodegen
-git clone https://github.com/FlameLaunchers/FlameLauncher-iOS.git
-cd FlameLauncher-iOS
+**[AGPL-3.0](LICENSE)**, by obligation rather than preference.
 
-./Scripts/fetch-runtime.sh     # renderers · LWJGL · JRE (~350 MB)
-xcodegen generate              # project.yml → .xcodeproj
-open FlameLauncher.xcodeproj
-```
+A combined work takes the **strongest copyleft** it contains, and the Terracotta this app
+statically links is AGPL-3.0.
 
-To build the natives yourself, use
-**[FlameLauncher-Natives](https://github.com/FlameLaunchers/FlameLauncher-Natives)** — the
-scripts and patches that build MobileGlues, Terracotta and LWJGL 3.4.1 for iOS live there.
+| Component | Licence | How it is used |
+|---|---|---|
+| **Terracotta** | **AGPL-3.0** | `libterracotta.a`, linked statically (Online LAN) |
+| Amethyst-iOS / PojavLauncher | GPL-3.0 | JavaApp, native bridges, patched LWJGL/GLFW |
+| EasyTier | LGPL-3.0 | inside Terracotta |
+| MobileGlues | LGPL-2.1-only | the `libmobileglues.dylib` renderer |
+| LWJGL | BSD-3-Clause | both the 3.3.3 and 3.4.1 stacks |
+| OpenJDK (Temurin) | GPL-2.0 + Classpath Exception | bundled JRE |
 
-> **The game does not run in the Simulator.** The JRE and renderers are device arm64
-> binaries, so the moment the Simulator `dlopen`s one it fails code-signature validation
-> and the process is SIGKILLed. Do UI work in the Simulator, run the game on a device.
+GPL-3.0 code may be combined into an AGPL-3.0 work — GPLv3 section 13 permits exactly this
+— and the result must be distributed under AGPL-3.0.
 
----
+Modifications to upstream projects are not vendored here; they are applied at build time by
+scripts. Those patches, and the full licence text of every upstream, live in
+**[FlameLauncher-Natives](https://github.com/FlameLaunchers/FlameLauncher-Natives)**.
 
-## How it works
-
-```
-SwiftUI launcher
-    ↓ JLI_Launch
-OpenJDK (inside the app process)
-    ↓ LWJGL 3.3.3 / 3.4.1
-GLFW reimplementation (touch and gamepad become key events)
-    ↓ OpenGL
-MobileGlues (desktop GL → GLES translation)
-    ↓
-ANGLE → Metal → GPU
-```
-
-**Two LWJGL stacks ship side by side.** Minecraft 26.2 needs LWJGL 3.4.1, which cannot be
-mixed with 3.3.3 — 3.4 introduced new callback infrastructure, so the Java side and the
-natives have to match. The right stack is chosen by reading the version JSON's library list.
-
----
-
-## Licence
-
-**AGPL-3.0**, by obligation rather than preference: the statically linked Terracotta is
-AGPL-3.0, and a combined work takes the strongest copyleft it contains. See
-[NOTICE](NOTICE) for the full component list.
+See [NOTICE](NOTICE) for the details.
 
 > Minecraft is a trademark of Mojang AB. This project is not affiliated with, endorsed by,
 > or connected to Mojang AB or Microsoft.
