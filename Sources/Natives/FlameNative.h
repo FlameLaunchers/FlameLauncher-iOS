@@ -21,6 +21,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// GL4ES/ANGLE 경로는 CAMetalLayer 를, OSMesa(Zink) 경로는 일반 CALayer 를 기대한다.
 void FlameNativeSetSurfaceLayer(CALayer *_Nullable layer);
 
+/// 26.3+ 의 SDL3 가 이 프로세스에서 초기화되는지 재고 로그로 남긴다.
+/// `FLAME_SDL_PROBE` 가 설정돼 있을 때만 돈다 — 자세한 사정은 `flame_sdl.m` 주석.
+void flame_probeSDL3(void);
+
 /// LWJGL 할당자로 넘길 함수 포인터 여섯 개(malloc, calloc, realloc, free,
 /// aligned_alloc, aligned_free). 큰 할당을 파일 기반 매핑으로 돌려 jetsam 장부에서
 /// 빼기 위한 것이다 — 자세한 사정은 `flame_alloc.c` 주석.

@@ -498,6 +498,10 @@ struct GameLauncher {
                 env["FLAME_ALLOC_MMAP_MIN"] = "32768"
             }
 
+            // 26.3+ 준비: SDL3 가 이 프로세스에서 초기화되는지 한 번 재 본다.
+            // ⚠️ 재보기만 하고 바로 SDL_Quit 한다(flame_sdl.m). 결과가 나오면 지운다.
+            env["FLAME_SDL_PROBE"] = "1"
+
             // ⚠️ 리소스 리로드의 **동시성**을 줄여 피크 라이브 셋 자체를 낮춘다.
             //
             //    마인크래프트는 `Util.backgroundExecutor()` 로 워커를 코어 수만큼 띄우고

@@ -738,6 +738,7 @@ int FlameNativeLaunchJVM(const char *javaHome, const char *_Nonnull *_Nonnull ar
         printf("[FlameLauncher] 훅 설치\n"); fflush(stdout);
         flame_installHooks();
         printf("[FlameLauncher] 메모리 감시 시작\n"); fflush(stdout);
+        flame_probeSDL3();   // 26.3 준비 — 재보기만 한다(FLAME_SDL_PROBE 필요)
         flame_startMemoryWatch();
 
         init_loadDefaultEnv();

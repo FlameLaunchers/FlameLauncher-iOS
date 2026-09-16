@@ -85,9 +85,14 @@ grep -rl "AngelAuraAmethyst" "$WORK/src/JavaApp/src" \
 #    올려 쓰려면 명시적으로:  LWJGL_VERSION=3.4.1 Scripts/build-javaapp.sh
 #    그때는 Scripts/build-lwjgl-natives.sh 로 네이티브도 같은 버전으로 맞춰야 한다.
 LWJGL_VERSION="${LWJGL_VERSION:-}"
+# ⚠️ lwjgl-sdl 은 26.3 부터 필요하다. 그 버전이 GLFW 를 **완전히 버리고** SDL3 로
+#    갔기 때문이다(26.3 의 version.json 에 glfw 라이브러리가 0개다).
+#    바닐라 jar 을 클래스패스에 섞으면 안 되고(아래 shouldDropVanillaLwjgl 주석 참고)
+#    이렇게 병합본 안에 넣어야 한다 — 26.2 의 spvc 와 같은 처리다.
+#    코어 쪽 준비는 이미 돼 있다: 3.4.1 의 Configuration 에 SDL_LIBRARY_NAME 이 있다.
 LWJGL_MODULES="lwjgl lwjgl-glfw lwjgl-opengl lwjgl-openal lwjgl-stb lwjgl-tinyfd \
                lwjgl-vma lwjgl-freetype lwjgl-vulkan lwjgl-nanovg lwjgl-shaderc \
-               lwjgl-spvc lwjgl-jemalloc"
+               lwjgl-spvc lwjgl-jemalloc lwjgl-sdl"
 if [ -n "$LWJGL_VERSION" ]; then
 echo "▸ LWJGL $LWJGL_VERSION 로 입력 jar 교체"
 # lwjglx(레거시 호환)는 업스트림 LWJGL 이 아니라 그대로 둔다.
