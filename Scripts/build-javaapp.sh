@@ -246,10 +246,14 @@ mkdir -p "$WORK/t2s"
 #      at ca.weblite.objc.Runtime.<clinit>
 #      at com.mojang.blaze3d.platform.MacosUtil.disableCloseWindowMenuItem
 #      at com.mojang.blaze3d.platform.Window.<init>
-#    com.mojang.blaze3d 는 난독화되지 않고 launcher.jar 이 클래스패스 맨 앞이라
-#    이렇게 가릴 수 있다. (JavaPatches/com/mojang/blaze3d/platform/MacosUtil.java)
+#    ⚠️ MacosUtil 을 직접 가리려 했으나 **클라이언트 jar 이 서명돼 있어**
+#       같은 패키지에 서명 없는 클래스를 끼우면 JVM 이 거부한다:
+#         SecurityException: … signer information does not match …
+#       java-objc-bridge 는 서명이 없으므로 한 단계 아래를 가린다.
+#       (JavaPatches/ca/weblite/objc/)
 "$BOOTJDK/jar" uf "$BUILD/launcher.jar" \
-  -C "$WORK/t2s" 'com/mojang/blaze3d/platform/MacosUtil.class'
+  -C "$WORK/t2s" 'ca/weblite/objc/Client.class' \
+  -C "$WORK/t2s" 'ca/weblite/objc/Proxy.class'
 
 for j in lwjgl.jar launcher.jar patchjna_agent.jar flame_bootstrap.jar; do
   [ -f "$BUILD/$j" ] || { echo "빌드 산출물 없음: $j"; exit 1; }

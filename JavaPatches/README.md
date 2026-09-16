@@ -22,3 +22,14 @@
 아래 세 개의 class 파일만 꺼내 `launcher.jar` 에 넣고 나머지는 버린다:
 
     Narrator$InitializeException.class   OperatingSystem.class   NarratorMac.class
+
+## `ca/weblite/objc` — 26.3+ 의 macOS 전용 창 손질 끄기
+
+마인크래프트는 `os.name` 만 보고 macOS 분기를 탄다. iOS 는 "Mac OS X" 로 보고되므로
+`MacosUtil.disableCloseWindowMenuItem()` 같은 AppKit 손질이 실제로 불리고, 그 안쪽의
+Rococoa → JNA 가 iOS 에서 `NoClassDefFoundError` 로 부팅을 끝낸다(`Error` 라 try/catch 에도 안 걸린다).
+
+`MacosUtil` 자체는 가릴 수 없다 — 클라이언트 jar 이 **서명돼 있어** 같은 패키지에 서명 없는
+클래스를 끼우면 `SecurityException: signer information does not match` 가 난다.
+서명이 없는 `java-objc-bridge` 쪽 `Client` · `Proxy` 를 아무 일도 안 하는 스텁으로 가린다.
+LWJGL 3.4.x 스택(`libs341`)에만 들어간다.
