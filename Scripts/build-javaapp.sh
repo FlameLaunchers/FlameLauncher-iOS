@@ -114,6 +114,18 @@ import pathlib, sys
 p = pathlib.Path(sys.argv[1])
 s = p.read_text()
 
+# 0) JNI.invokeI 시그니처 변화 (3.4.3).
+#
+#    3.4.1 까지는 boolean 을 그대로 넘겼는데 3.4.3 에서 int 만 받게 바뀌었다:
+#      GLFW.java:796: error: incompatible types: boolean cannot be converted to int
+#        isGLFWReady = invokeI(!isCalledFromLWJGLX, __functionAddress) != 0;
+#
+#    26.3 은 GLFW 를 아예 안 쓰지만(SDL3 로 갔다) 이 파일은 여전히 컴파일돼야 한다.
+old = "invokeI(!isCalledFromLWJGLX, __functionAddress)"
+if old in s:
+    s = s.replace(old, "invokeI(!isCalledFromLWJGLX ? 1 : 0, __functionAddress)")
+    print("  GLFW.java: invokeI 에 boolean→int (3.4.3)")
+
 # 1) glfwPlatformSupported — 26.2 의 GLX._initGlfw 가 부팅 첫머리에 부른다.
 #    없으면 NoSuchMethodError 로 게임 초기화 단계에서 죽는다.
 old = "        return GLFW_PLATFORM_X11;\n    }"
@@ -189,7 +201,15 @@ GLFWPATCH
 emit_patch "$WORK/src" amethyst-javaapp
 
 echo "▸ 컴파일"
-make -C "$WORK/src/JavaApp" -j"$(sysctl -n hw.ncpu)" BOOTJDK="$BOOTJDK" >/dev/null
+# ⚠️ stdout 을 버리지 않는다. 예전에는 `>/dev/null` 이었는데, Makefile 의 검사들이
+#    실패 이유를 **stdout 으로** 말한다(check_empty_classes 가 어떤 파일이 비었는지
+#    echo 한다). 그걸 버리면 `make: *** [check_empty_classes] Error 1` 만 남아서
+#    무엇이 잘못됐는지 알 수 없다 — 실제로 두 번 헤맸다.
+if ! make -C "$WORK/src/JavaApp" -j"$(sysctl -n hw.ncpu)" BOOTJDK="$BOOTJDK" > "$WORK/make.log" 2>&1; then
+  echo "▸ make 실패 — 마지막 40줄:"
+  tail -40 "$WORK/make.log" | sed 's/^/    /'
+  exit 1
+fi
 
 BUILD="$WORK/src/JavaApp/build"
 echo "▸ FlameLauncher 자체 부트스트랩 컴파일"

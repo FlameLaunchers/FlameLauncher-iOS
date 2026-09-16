@@ -515,7 +515,12 @@ struct GameLauncher {
             //
             //    `max.bg.threads` 는 마인크래프트가 직접 읽는 값이다(Util.getMaxThreads).
             //    줄이면 리로드가 느려지는 대신 동시에 살아 있는 이미지가 줄어든다.
-            argv.append("-Dmax.bg.threads=2")
+            // ⚠️ env 로 준다. 여기서 argv.append 하면 **게임 인자**로 들어간다 —
+            //    이 블록은 JVM 인자 구성이 끝난 뒤라 메인 클래스 뒤에 붙는다.
+            //    실제로 마인크래프트가 이렇게 무시했다:
+            //      Completely ignored arguments: [--userType, msa, -Dmax.bg.threads=2]
+            env["JDK_JAVA_OPTIONS"] = ((env["JDK_JAVA_OPTIONS"] ?? "") + " -Dmax.bg.threads=2")
+                .trimmingCharacters(in: .whitespaces)
             print("[Flame] 모드 \(modCount)개\(isModpack ? " (모드팩)" : "")"
                   + " · 아틀라스 상한 " + (atlasCap.map(String.init) ?? "없음"))
         }

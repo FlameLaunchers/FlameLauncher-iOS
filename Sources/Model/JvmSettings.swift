@@ -444,6 +444,13 @@ struct JvmSettings: Codable, Equatable {
             //    우리 Frameworks/ 는 더 이상 보지 않는다.
             //    LWJGL 의 loadNative 는 이름이 절대경로면 **가장 먼저** 그걸 그대로 연다.
             "-Dorg.lwjgl.spvc.libname=\(baseFrameworks)/libspirv-cross.dylib",
+            // SDL3 — 26.3 부터 창·입력이 전부 여기로 간다(그 버전은 GLFW 를 아예 안 쓴다).
+            //
+            // ⚠️ spvc 와 같은 이유로 **절대경로**다. 26.3 의 NativeLibrariesBootstrap.loadSdl
+            //    도 `configureLWJGLLibraryPath()` 를 거치므로 Frameworks/ 를 보지 않는다.
+            // ⚠️ 정적 링크가 아니라 dylib 이어야 한다 — org.lwjgl.sdl.SDL 은 심볼을 찾는 게
+            //    아니라 `Library.loadNative` 로 **파일을 연다**(Configuration.SDL_LIBRARY_NAME).
+            "-Dorg.lwjgl.sdl.libname=\(baseFrameworks)/libSDL3.dylib",
             // iOS 에는 macOS 용 Preferences 백엔드가 없다 — 파일 기반으로 돌린다.
             "-Djava.util.prefs.PreferencesFactory=java.util.prefs.FileSystemPreferencesFactory",
             "-Dcacio.font.fontmanager=sun.awt.X11FontManager",

@@ -85,6 +85,12 @@ targets:
         #    멀티태스킹 가능 앱은 네 방향을 전부 지원해야 하기 때문이다.
         #    가로 고정이 목적이므로 전체 화면을 요구한다.
         UIRequiresFullScreen: true
+      # ⚠️ 없으면 UIKit 이 포인터/마우스 이벤트를 앱에 주지 않는다. SDL3 의 uikit
+      #    백엔드가 입력을 세우면서 콘솔에 대놓고 요구한다:
+      #      "You need UIApplicationSupportsIndirectInputEvents in your Info.plist
+      #       for mouse support"
+      #    26.3 은 창·입력이 전부 SDL 로 가므로 이게 있어야 한다.
+      UIApplicationSupportsIndirectInputEvents: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
