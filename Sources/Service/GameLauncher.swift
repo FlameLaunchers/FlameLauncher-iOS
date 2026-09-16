@@ -241,6 +241,30 @@ struct GameLauncher {
             .path
     }
 
+    /// 클래스패스 중복 판정용 — 아티팩트 + **분류자**. 버전만 다르면 같은 키다.
+    ///
+    ///     .../guava/failureaccess/1.0.1/failureaccess-1.0.1.jar    →  .../guava/failureaccess.jar
+    ///     .../forge/1.21.4-54.1.14/forge-1.21.4-54.1.14-client.jar  →  .../minecraftforge/forge-client.jar
+    ///
+    /// ⚠️ 클래스패스는 `libraries/` 를 통째로 훑어 모으므로, 로더와 바닐라가 **다른 버전**을
+    ///    받아 두면 둘 다 올라간다. 1.21.4 에서 Forge 와 Fabric 이 둘 다 이걸로 죽었다:
+    ///      Forge 54.1.14  failureaccess 1.0.1 + 1.0.2 — 1.0.2 부터 모듈 이름이 바뀌어 둘 다 해석됨
+    ///        ResolutionException: Modules com.google.common.util.concurrent.internal and
+    ///        failureaccess export package com.google.common.util.concurrent.internal
+    ///      Fabric 0.19.5  asm 9.10.1 + 9.6
+    ///        IllegalStateException: duplicate ASM classes found on classpath
+    ///    **먼저 온 것(로더)을 남긴다** — 공식 런처와 같고, Forge 도 guava 를 이미 그렇게 고른다.
+    ///
+    /// ⚠️ 분류자는 지킨다. `forge-…-client.jar` 와 `forge-…-universal.jar` 은 둘 다 필요하다.
+    ///    Maven 배치가 아니면(앱 번들 libs/, versions/ 의 클라이언트 jar) 경로를 그대로 돌려준다.
+    static func libraryKey(_ jarPath: String) -> String {
+        let versionDir = URL(fileURLWithPath: jarPath).deletingLastPathComponent()
+        let prefix = "\(versionDir.deletingLastPathComponent().lastPathComponent)-\(versionDir.lastPathComponent)"
+        let name = URL(fileURLWithPath: jarPath).lastPathComponent
+        guard name.hasPrefix(prefix) else { return jarPath }
+        return artifactKey(jarPath) + name.dropFirst(prefix.count)
+    }
+
     /// 로더(version.json)가 준 JVM 인자의 자리표시자를 실제 값으로 바꾼다.
     ///
     /// ⚠️ 예전에는 `filter { !$0.contains("${") }` 로 **자리표시자가 든 인자를 그냥 버렸다.**
@@ -615,7 +639,7 @@ struct GameLauncher {
         return entries
             .filter { !modulePath.contains($0) && !moduleArtifacts.contains(Self.artifactKey($0)) }
             .filter { !Self.isLoaderIntermediateJar($0) }
-            .filter { seen.insert($0).inserted }
+            .filter { seen.insert(Self.libraryKey($0)).inserted }   // 같은 라이브러리는 먼저 온 한 벌만
             .joined(separator: ":")
     }
 

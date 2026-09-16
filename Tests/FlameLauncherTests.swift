@@ -545,6 +545,25 @@ final class FlameLauncherTests: XCTestCase {
             base)
     }
 
+    /// 로더와 바닐라가 받은 **다른 버전**은 한 벌로 합치되, 분류자가 다르면 따로 남긴다.
+    /// failureaccess 1.0.1 · 1.0.2 가 함께 올라가 Forge 1.21.4 모듈 해석이 막혔다.
+    func testLibraryKeyMergesVersionsButKeepsClassifiers() {
+        let lib = "/inst/libraries"
+        XCTAssertEqual(
+            GameLauncher.libraryKey("\(lib)/com/google/guava/failureaccess/1.0.1/failureaccess-1.0.1.jar"),
+            GameLauncher.libraryKey("\(lib)/com/google/guava/failureaccess/1.0.2/failureaccess-1.0.2.jar"))
+        XCTAssertEqual(
+            GameLauncher.libraryKey("\(lib)/com/google/guava/guava/32.1.2-jre/guava-32.1.2-jre.jar"),
+            GameLauncher.libraryKey("\(lib)/com/google/guava/guava/33.3.1-jre/guava-33.3.1-jre.jar"))
+        XCTAssertNotEqual(
+            GameLauncher.libraryKey("\(lib)/net/minecraftforge/forge/1.21.4-54.1.14/forge-1.21.4-54.1.14-client.jar"),
+            GameLauncher.libraryKey("\(lib)/net/minecraftforge/forge/1.21.4-54.1.14/forge-1.21.4-54.1.14-universal.jar"))
+        // Maven 배치가 아니면 건드리지 않는다.
+        XCTAssertEqual(GameLauncher.libraryKey("/app/libs/lwjgl.jar"), "/app/libs/lwjgl.jar")
+        XCTAssertEqual(GameLauncher.libraryKey("/inst/versions/1.21.4/1.21.4.jar"),
+                       "/inst/versions/1.21.4/1.21.4.jar")
+    }
+
     /// 요구 버전에 못 미치면 **낮은 JRE 를 떠넘기지 않는다.**
     /// 예전에는 그래서 MC 26.2(Java 25)가 Java 21 로 떠 UnsupportedClassVersionError 로 죽었다.
     func testJavaSelectionRefusesTooOldRuntime() {
