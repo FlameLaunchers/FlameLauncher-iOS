@@ -23,7 +23,10 @@
 # 사용:  Scripts/build-lwjgl-natives.sh [태그]
 set -euo pipefail
 
-REF="${1:-3.4.1}"
+# ⚠️ 기본값은 3.4.3 이다. 26.3 이 3.4.3 을 요구하고 26.2 도 같은 스택(Frameworks341)을 쓴다.
+#    자바 jar 과 네이티브가 한 버전이라도 어긋나면 클래스 초기화에서 죽는다:
+#      UnsatisfiedLinkError: 'int org.lwjgl.system.MemoryUtil.ngetPageSize()'   (3.4.3 jar + 3.4.1 네이티브)
+REF="${1:-3.4.3}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # ⚠️ 기본 Frameworks 를 덮어쓰지 않는다. 3.4.1 네이티브는 26.2+ 전용이고,
 #    1.21.x 는 Amethyst 의 3.3.3 판으로 돌아야 한다(섞으면 Iris 가 부팅 중에 죽는다).

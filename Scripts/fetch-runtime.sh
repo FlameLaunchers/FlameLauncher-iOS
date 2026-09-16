@@ -58,6 +58,32 @@ for fw in libEGL libGLESv2 AltKit CAltKit; do
   done
 done
 
+# ── MoltenVK ───────────────────────────────────────────────────────────
+#
+# ⚠️ 위에서 받은 libMoltenVK.dylib(1.2.9)을 **공식 릴리스로 덮어쓴다.**
+#    26.3 의 renderpearl 셰이더에 `vertex` 라는 GLSL 함수가 있는데, 1.2.9 에 든
+#    SPIRV-Cross(84cdc3b)는 그 이름을 MSL 로 그대로 옮긴다. Metal 예약어라 컴파일이 깨지고
+#    로딩 타이틀 직후 게임이 멈춘다:
+#      [mvk-error] Shader library compile failed:
+#        float3 vertex(thread const int& index)    ← expected unqualified-id
+#      Can't compile pipeline minecraft:pipeline/oit_transmittance_flat_clouds
+#    1.4.2 의 SPIRV-Cross(6c09849)는 get_illegal_func_names 에 `vertex` 가 있어 이름을 바꾼다.
+#
+# ⚠️ 파일 이름은 그대로 둔다 — libOSMesa(Zink)가 @loader_path/libMoltenVK.dylib 로 링크돼 있다.
+#    OSMesa 가 가져다 쓰는 심볼 104개는 1.4.2 에 전부 있다(dyld_info -imports 로 대조).
+MVK_VERSION="v1.4.2"
+MVK_SHA256="b5d947b1660e6e9fed40b9cd2387e160aaab9e80b775c0cef7e14059405178c1"
+MVK_BIN="MoltenVK/MoltenVK/dynamic/MoltenVK.xcframework/ios-arm64/MoltenVK.framework/MoltenVK"
+echo "▸ Runtime/Frameworks/libMoltenVK.dylib ($MVK_VERSION)"
+tmp="$(mktemp -d)"
+curl -sSL --fail --retry 3 -o "$tmp/mvk.tar" \
+  "https://github.com/KhronosGroup/MoltenVK/releases/download/$MVK_VERSION/MoltenVK-ios.tar"
+echo "$MVK_SHA256  $tmp/mvk.tar" | shasum -a 256 -c --status \
+  || { echo "    ✗ 체크섬 불일치 — 받은 파일을 쓰지 않습니다"; exit 1; }
+tar -xf "$tmp/mvk.tar" -C "$tmp" "$MVK_BIN"
+cp "$tmp/$MVK_BIN" "$ROOT/Runtime/Frameworks/libMoltenVK.dylib"
+rm -rf "$tmp"
+
 # ── JRE ────────────────────────────────────────────────────────────────
 #
 # PojavLauncher iOS 저장소는 2025-09-23 에 아카이브됐고 JRE 도 2022년판이 마지막이다.
