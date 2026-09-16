@@ -234,11 +234,14 @@ struct GameView: View {
     private func startPolling() {
         pollTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { _ in
             Task { @MainActor in
+                // 26.3+(SDL3): SDL 이 따로 띄운 창을 서피스 안으로 들인다 — 주석은 adoptSDLWindow.
+                let sdlSurfaceReady = surface?.adoptSDLWindow() ?? false
                 isGrabbing = runtime.isGrabbing
                 fps = runtime.fps
                 freeMemoryMb = runtime.availableMemoryMb
                 // 첫 프레임이 나오면 부팅 오버레이를 내린다.
-                if isBooting, runtime.hasRendered { isBooting = false }
+                // (SDL 경로는 Vulkan 이라 GL 스왑 카운터가 안 돈다 — Metal 뷰가 생긴 것으로 갈음한다)
+                if isBooting, runtime.hasRendered || sdlSurfaceReady { isBooting = false }
             }
         }
         // 런타임이 없으면 프레임이 영영 안 나오므로, 오버레이가 사유를 보여준 채로 남는다.

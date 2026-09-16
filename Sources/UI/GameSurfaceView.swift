@@ -338,6 +338,42 @@ class MinecraftSurfaceView: UIView {
         longPressWork = nil
     }
 
+    // MARK: - SDL3 (26.3+)
+
+    /// 26.3+ 가 SDL 로 만든 게임 화면을 이 서피스 **안으로** 들인다.
+    /// Vulkan 서피스(Metal 뷰)까지 들였으면 true — 곧 첫 프레임이 나온다.
+    ///
+    /// ⚠️ SDL 의 uikit 백엔드는 UIWindow 를 새로 만들어 `makeKeyAndVisible` 한다
+    ///    (UIKit_ShowWindow). 그 창이 앱 창 위를 덮어서 화면 버튼·부팅 오버레이가 전부
+    ///    가려졌다 — "로딩 타이틀은 뜨는데 가상 키패드가 안 뜬다" 가 이것이다.
+    ///    SDL 창의 루트 뷰를 여기 맨 아래로 옮기고 SDL 창은 숨긴다. 터치는 핫바·길게 누르기·
+    ///    감도 규칙을 가진 이 뷰가 계속 받아야 하므로 옮긴 뷰는 터치를 끈다.
+    ///
+    /// ⚠️ 한 번으로 안 끝난다. SDL 은 Vulkan 서피스를 만들 때 새 Metal 뷰를 `rootViewController`
+    ///    재지정으로 **자기 창에 다시 꽂는다**(-[SDL_uikitview setSDLWindow:]). 그래서 GameView
+    ///    폴링이 매번 부른다 — 이미 들였으면 비교 몇 번으로 끝난다.
+    func adoptSDLWindow() -> Bool {
+        guard let host = window,
+              let sdl = host.windowScene?.windows.first(where: {
+                  $0 !== host && $0.rootViewController.map { NSStringFromClass(type(of: $0)) }
+                      == "SDL_uikitviewcontroller"
+              }),
+              let content = sdl.rootViewController?.view
+        else { return false }
+
+        if content.superview !== self {
+            content.frame = bounds
+            content.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            content.isUserInteractionEnabled = false
+            insertSubview(content, at: 0)
+        }
+        if !sdl.isHidden {
+            sdl.isHidden = true
+            host.makeKey()
+        }
+        return content.layer is CAMetalLayer
+    }
+
     // MARK: - 하드웨어 키보드
 
     override var canBecomeFirstResponder: Bool { true }

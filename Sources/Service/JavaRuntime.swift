@@ -176,7 +176,7 @@ final class NativeJavaRuntime: JavaRuntime {
     }
 
     func sendKey(_ glfwKey: Int, action: Int, mods: Int) {
-        FlameNativeSendKey(Int32(glfwKey), Int32(GlfwKeys.scancode(for: glfwKey)),
+        FlameNativeSendKey(Int32(glfwKey), Int32(GlfwKeys.sdlScancode(for: glfwKey)),
                            Int32(action), Int32(mods))
     }
 

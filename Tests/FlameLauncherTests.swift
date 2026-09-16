@@ -406,6 +406,22 @@ final class FlameLauncherTests: XCTestCase {
 
     /// 탭과 롱프레스는 **서로 다른 버튼**이어야 한다.
     /// 같게 두면 일반 모드에서 우클릭이 안 나가 음식을 먹을 수 없다(실제 버그였다).
+    /// 26.3+(SDL3)는 키를 SDL 스캔코드로만 받는다 — 화면 버튼이 틀린 값으로 가면 먹통이다.
+    /// 기대값은 26.3 클라이언트의 `InputConstants` 상수를 javap 로 옮긴 것이다.
+    func testSdlScancodeMatchesMinecraft263() {
+        XCTAssertEqual(GlfwKeys.sdlScancode(for: 87), 26)                     // KEY_W
+        XCTAssertEqual(GlfwKeys.sdlScancode(for: GlfwKeys.a), 4)              // KEY_A
+        XCTAssertEqual(GlfwKeys.sdlScancode(for: 49), 30)                     // KEY_1
+        XCTAssertEqual(GlfwKeys.sdlScancode(for: GlfwKeys.space), 44)         // KEY_SPACE
+        XCTAssertEqual(GlfwKeys.sdlScancode(for: GlfwKeys.escape), 41)        // KEY_ESCAPE
+        XCTAssertEqual(GlfwKeys.sdlScancode(for: GlfwKeys.enter), 40)         // KEY_RETURN
+        XCTAssertEqual(GlfwKeys.sdlScancode(for: GlfwKeys.backspace), 42)     // KEY_BACKSPACE
+        XCTAssertEqual(GlfwKeys.sdlScancode(for: GlfwKeys.leftShift), 225)    // KEY_LSHIFT
+        XCTAssertEqual(GlfwKeys.sdlScancode(for: GlfwKeys.leftControl), 224)  // KEY_LCONTROL
+        XCTAssertEqual(GlfwKeys.sdlScancode(for: GlfwKeys.f1 + 2), 60)        // KEY_F3
+        XCTAssertEqual(GlfwKeys.sdlScancode(for: -1), 0)
+    }
+
     func testTouchButtonMapping() {
         // 일반 모드 — 탭은 우클릭(놓기), 길게는 좌클릭 유지(채굴)
         XCTAssertEqual(TouchButton.tap(combatMode: false, grabbing: true), GlfwKeys.mouseRight)

@@ -85,7 +85,9 @@ void FlameNativeDumpThreads(void);
 /// 첫 프레임이 그려졌는지 — 부팅 오버레이를 내릴 시점 판단에 쓴다.
 bool FlameNativeHasRendered(void);
 
-// ── 입력 중계 (GLFW 콜백으로 들어간다) ──
+// ── 입력 중계 (GLFW 콜백으로, 26.3+ 는 SDL 이벤트로 들어간다) ──
+/// @param key      GLFW 키코드
+/// @param scancode SDL3 스캔코드(= HID usage). 26.3+ 만 쓴다 — `GlfwKeys.sdlScancode(for:)`
 void FlameNativeSendKey(int key, int scancode, int action, int mods);
 void FlameNativeSendChar(unsigned int codepoint);
 void FlameNativeSendMouseButton(int button, int action, int mods);

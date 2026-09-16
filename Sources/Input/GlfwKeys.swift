@@ -166,10 +166,22 @@ enum GlfwKeys {
         return Int(ascii)
     }
 
-    /// GLFW 키코드 → LWJGL 이 기대하는 scancode. 안드로이드 `getScancode` 와 동일 규칙:
-    /// 대부분의 키에서 마인크래프트는 scancode 를 보지 않지만, 0 을 넘기면 일부
-    /// 키 바인딩 화면이 "미설정"으로 표시되므로 키코드를 그대로 되돌려준다.
-    static func scancode(for key: Int) -> Int { key }
+    /// GLFW 키코드 → SDL3 스캔코드. 26.3+ 는 키를 **이 값으로만** 받는다
+    /// (26.3 의 `InputConstants.KEY_W = 26`). 매핑이 없으면 0(SDL_SCANCODE_UNKNOWN).
+    ///
+    /// SDL 스캔코드는 USB HID usage 그 자체라 `fromHID` 를 뒤집으면 된다 — 표를 따로 두면
+    /// 하드웨어 키보드 매핑과 어긋날 여지만 생긴다.
+    /// (GLFW 경로는 이 값을 안 쓴다. 그쪽 scancode 자리는 네이티브가 예전처럼 키코드로 채운다)
+    static func sdlScancode(for key: Int) -> Int { hidByGlfw[key] ?? 0 }
+
+    private static let hidByGlfw: [Int: Int] = {
+        var map: [Int: Int] = [:]
+        for raw in 0...0xE7 {
+            guard let usage = UIKeyboardHIDUsage(rawValue: raw), let glfw = fromHID(usage) else { continue }
+            if map[glfw] == nil { map[glfw] = raw }
+        }
+        return map
+    }()
 }
 
 /// 편집기의 "키 추가" 목록. 안드로이드 GlfwKeysAll 대응 —

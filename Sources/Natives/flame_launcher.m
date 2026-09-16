@@ -44,6 +44,14 @@ void CallbackBridge_nativeSendCursorPos(char event, CGFloat x, CGFloat y);
 void CallbackBridge_nativeSendScroll(CGFloat xoffset, CGFloat yoffset);
 void CallbackBridge_pauseGameIfNeed(void);
 
+// 26.3+ SDL3 입력 (flame_sdl.m). SDL 창이 없으면 false / -1 — 그때는 GLFW 경로로 간다.
+bool flame_sdl_sendKey(int scancode, int action);
+bool flame_sdl_sendChar(unsigned int codepoint);
+bool flame_sdl_sendMouseButton(int glfwButton, int action);
+bool flame_sdl_sendCursorPos(int mode, double x, double y);
+bool flame_sdl_sendScroll(double dx, double dy);
+int flame_sdl_isGrabbing(void);
+
 /// 첫 호출에서 저장해 둔 JLI 진입점과 인자.
 ///
 /// ⚠️ Darwin JLI 는 `apple_main` 이라는 새 pthread 를 만들어 **호스트 실행 파일의 `main`**
@@ -388,7 +396,10 @@ static void flame_startMemoryWatch(void) {
 
 // MARK: - 상태 조회
 
-bool FlameNativeIsGrabbing(void) { return isGrabbing == JNI_TRUE; }
+bool FlameNativeIsGrabbing(void) {
+    int sdlGrab = flame_sdl_isGrabbing();
+    return sdlGrab >= 0 ? sdlGrab == 1 : isGrabbing == JNI_TRUE;
+}
 bool FlameNativeHasRendered(void) { return flameHasRendered; }
 
 int FlameNativeCurrentFPS(void) {
@@ -415,29 +426,43 @@ int FlameNativeCurrentFPS(void) {
 }
 
 // MARK: - 입력 주입
+//
+// 26.3+ 는 SDL 이벤트로만 입력을 읽는다 — SDL 창이 있으면 그쪽으로 보내고 끝낸다(flame_sdl.m).
 
 void FlameNativeSendKey(int key, int scancode, int action, int mods) {
-    CallbackBridge_nativeSendKey(key, scancode, action, mods);
+    if (flame_sdl_sendKey(scancode, action)) return;
+    // GLFW 경로는 scancode 자리에 예전처럼 **키코드**를 넣는다 — 0 을 넘기면 일부 키 바인딩
+    // 화면이 "미설정"으로 보인다(안드로이드 getScancode 와 같은 규칙).
+    CallbackBridge_nativeSendKey(key, key, action, mods);
 }
 
 void FlameNativeSendChar(unsigned int codepoint) {
+    if (flame_sdl_sendChar(codepoint)) return;
     CallbackBridge_nativeSendChar((jchar)codepoint);
 }
 
 void FlameNativeSendMouseButton(int button, int action, int mods) {
+    if (flame_sdl_sendMouseButton(button, action)) return;
     CallbackBridge_nativeSendMouseButton(button, action, mods);
 }
 
 void FlameNativeSendCursorPos(int mode, double x, double y) {
+    if (flame_sdl_sendCursorPos(mode, x, y)) return;
     // mode 0 = 절대좌표(메뉴/인벤토리), 1 = 상대델타(인게임 시점 회전)
     CallbackBridge_nativeSendCursorPos(mode == 0 ? ACTION_DOWN : ACTION_MOVE_MOTION, x, y);
 }
 
 void FlameNativeSendScroll(double dx, double dy) {
+    if (flame_sdl_sendScroll(dx, dy)) return;
     CallbackBridge_nativeSendScroll(dx, dy);
 }
 
-void FlameNativePauseGame(void) { CallbackBridge_pauseGameIfNeed(); }
+void FlameNativePauseGame(void) {
+    switch (flame_sdl_isGrabbing()) {
+        case -1: CallbackBridge_pauseGameIfNeed(); break;
+        case 1:  flame_sdl_sendKey(41, 1); flame_sdl_sendKey(41, 0); break;   // ESC
+    }
+}
 
 // MARK: - 기본 환경변수
 
