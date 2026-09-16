@@ -240,6 +240,17 @@ mkdir -p "$WORK/t2s"
   -C "$WORK/t2s" 'com/mojang/text2speech/OperatingSystem.class' \
   -C "$WORK/t2s" 'com/mojang/text2speech/NarratorMac.class'
 
+# ⚠️ 26.3+ 의 macOS 전용 창 손질을 끈다. 마인크래프트는 os.name 만 보고 macOS 분기를
+#    타는데(iOS 는 "Mac OS X" 로 보고된다) 그 안쪽이 Rococoa → JNA → AppKit 이라
+#    iOS 에서 NoClassDefFoundError 로 부팅이 끝난다. Error 라 try/catch 에도 안 걸린다:
+#      at ca.weblite.objc.Runtime.<clinit>
+#      at com.mojang.blaze3d.platform.MacosUtil.disableCloseWindowMenuItem
+#      at com.mojang.blaze3d.platform.Window.<init>
+#    com.mojang.blaze3d 는 난독화되지 않고 launcher.jar 이 클래스패스 맨 앞이라
+#    이렇게 가릴 수 있다. (JavaPatches/com/mojang/blaze3d/platform/MacosUtil.java)
+"$BOOTJDK/jar" uf "$BUILD/launcher.jar" \
+  -C "$WORK/t2s" 'com/mojang/blaze3d/platform/MacosUtil.class'
+
 for j in lwjgl.jar launcher.jar patchjna_agent.jar flame_bootstrap.jar; do
   [ -f "$BUILD/$j" ] || { echo "빌드 산출물 없음: $j"; exit 1; }
 done
