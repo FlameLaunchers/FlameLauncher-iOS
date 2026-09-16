@@ -26,7 +26,7 @@
 
 | | |
 |---|---|
-| **바닐라** | 1.7 ~ **26.2** |
+| **바닐라** | 1.7 ~ **26.3** |
 | **모드 로더** | Fabric · Forge · NeoForge · Quilt |
 | **모드·모드팩** | CurseForge · Modrinth 에서 검색해 바로 설치 |
 | **의존성** | 필요한 모드를 **자동으로 같이 설치**합니다 |
@@ -159,7 +159,7 @@ TrollStore 가 안 되는 기기에서 가장 편한 길입니다. 컴퓨터는 
 | 실행하자마자 꺼짐 | JIT 가 안 켜진 상태입니다. 위 2-1 부터 확인하세요 |
 | 게임 중 꺼짐 | 메모리 부족입니다. 렌더 거리를 낮추고, 가벼운 셰이더로 바꿔보세요 |
 | 다른 버전 실행이 안 됨 | 위 2-7 참고 — 앱을 완전히 종료했다 여세요 |
-| 26.3 스냅샷이 안 됨 | 마인크래프트가 GLFW 를 SDL3 로 교체했습니다. 미대응이며 **26.2 는 정상입니다** |
+| 26.3 에서 핫바 터치가 어긋남 | 26.3 은 해상도 배율을 쓰지 않고 항상 기기 해상도로 그립니다. 설정에서 **100%** 로 두세요 |
 | 온라인 LAN 참가가 안 보임 | iOS 는 가상 네트워크 장치를 못 만듭니다. 화면의 주소를 **직접 입력**하세요 (방 열기는 정상 동작) |
 
 ---
@@ -208,7 +208,7 @@ they run. A real OpenJDK boots inside the app process — this is not an emulato
 
 | | |
 |---|---|
-| **Vanilla** | 1.7 through **26.2** |
+| **Vanilla** | 1.7 through **26.3** |
 | **Mod loaders** | Fabric · Forge · NeoForge · Quilt |
 | **Mods and modpacks** | Search and install straight from CurseForge and Modrinth |
 | **Dependencies** | Required mods are **installed alongside automatically** |
@@ -342,7 +342,7 @@ into that version** when you reopen it. Reopen the app and the rest happens on i
 | Quits immediately on launch | JIT is not enabled. Start from 2-1 |
 | Crashes mid-game | Out of memory. Lower render distance, switch to a lighter shader pack |
 | Play does nothing on another version | See 2-7 — fully quit and reopen |
-| 26.3 snapshots won't run | Minecraft swapped GLFW for SDL3. Unsupported; **26.2 works fine** |
+| Hotbar taps miss on 26.3 | 26.3 ignores the resolution scale and always renders at native resolution. Keep it at **100%** in settings |
 | Joining an Online LAN room shows nothing | iOS cannot create a virtual network device. **Type the address in by hand** (hosting works normally) |
 
 ---
