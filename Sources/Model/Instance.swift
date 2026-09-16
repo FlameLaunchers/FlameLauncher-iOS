@@ -49,28 +49,13 @@ struct InstanceMeta: Codable, Identifiable, Hashable {
         }
     }
 
-    /// 로더가 없는 바닐라면 마인크래프트 아이콘, 있으면 로더 아이콘.
-    /// 기본 아이콘으로 쓸 자산 이름. nil 이면 이모지(`fallbackSymbol`)로 떨어진다.
+    /// 내려받은 로고가 없을 때 쓰는 아이콘 자산 — 로더 아이콘(바닐라는 마인크래프트).
     ///
-    /// 바닐라는 이모지(🟩)로 그리고 있었는데, 옆에 놓인 모드팩들이 실제 로고를 받아
-    /// 쓰기 때문에 혼자만 그림이 아니라 글자로 보였다.
-    /// 모드팩(sourceModId)은 자기 로고를 내려받아 쓰므로 여기 해당하지 않는다.
-    var fallbackAsset: String? {
-        guard sourceModId == nil else { return nil }
-        switch loaderType?.lowercased() {
-        case nil, "", "vanilla": return "minecraft"
-        default:                 return nil
-        }
-    }
-
-    var fallbackSymbol: String {
-        switch loaderType?.lowercased() {
-        case "fabric":   return "🧵"
-        case "forge":    return "🔨"
-        case "neoforge": return "⚒️"
-        case "quilt":    return "🧶"
-        default:         return sourceModId != nil ? "📦" : "🟩"
-        }
+    /// 예전에는 로더를 이모지(🧵🔨⚒️🧶)로 그렸는데, 옆에 놓인 모드팩들이 실제 로고를
+    /// 받아 쓰기 때문에 혼자만 그림이 아니라 글자로 보였다. 로고를 못 받은 모드팩도
+    /// 자기 로더 아이콘으로 떨어진다.
+    var fallbackAsset: String {
+        (ModLoader(rawValue: loaderType?.lowercased() ?? "") ?? .vanilla).iconAsset
     }
 }
 

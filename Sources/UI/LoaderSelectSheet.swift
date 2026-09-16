@@ -48,7 +48,8 @@ struct LoaderSelectSheet: View {
                         }
                     } label: {
                         HStack(spacing: 12) {
-                            Text(item.emoji).font(.system(size: 26))
+                            Image(item.iconAsset).resizable().scaledToFit()
+                                .frame(width: 32, height: 32)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(item.displayName)
                                     .font(.system(size: 15, weight: .bold))

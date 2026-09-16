@@ -16,13 +16,15 @@ enum ModLoader: String, CaseIterable, Identifiable {
         }
     }
 
-    var emoji: String {
+    /// 로더 아이콘 자산. 안드로이드와 같은 그림이다(Forge 는 모루).
+    /// Quilt 는 공식 로고 — QuiltMC/art 의 brand 폴더, CC0.
+    var iconAsset: String {
         switch self {
-        case .vanilla:  return "🟩"
-        case .fabric:   return "🧵"
-        case .forge:    return "🔨"
-        case .neoforge: return "⚒️"
-        case .quilt:    return "🧶"
+        case .vanilla:  return "minecraft"
+        case .fabric:   return "loader_fabric"
+        case .forge:    return "anvil"
+        case .neoforge: return "loader_neoforge"
+        case .quilt:    return "loader_quilt"
         }
     }
 

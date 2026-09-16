@@ -670,7 +670,7 @@ private struct InstanceRow: View {
     }
 }
 
-/// 인스턴스 아이콘. 다운로드한 콘텐츠 로고가 있으면 그것, 없으면 로더 기본 이모지.
+/// 인스턴스 아이콘. 다운로드한 콘텐츠 로고가 있으면 그것, 없으면 로더 아이콘.
 struct InstanceIcon: View {
     let meta: InstanceMeta
     let size: CGFloat
@@ -680,11 +680,9 @@ struct InstanceIcon: View {
             if let url = meta.iconURL, FileManager.default.fileExists(atPath: url.path),
                let data = try? Data(contentsOf: url), let image = UIImage(data: data) {
                 Image(uiImage: image).resizable().scaledToFill()
-            } else if let asset = meta.fallbackAsset {
-                // 정사각 캔버스에 담아 둔 그림이라 비율을 지켜 넣는다.
-                Image(asset).resizable().scaledToFit()
             } else {
-                Text(meta.fallbackSymbol).font(.system(size: size * 0.8))
+                // 정사각 캔버스에 담아 둔 그림이라 비율을 지켜 넣는다.
+                Image(meta.fallbackAsset).resizable().scaledToFit()
             }
         }
         .frame(width: size, height: size)
