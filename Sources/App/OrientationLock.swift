@@ -88,6 +88,42 @@ enum OrientationLock {
         window.frame = bounds
     }
 
+    /// 씬 기하가 바뀌거나 기기가 돌 때마다 가로·창 프레임을 다시 맞춘다.
+    ///
+    /// ⚠️ 활성화(didBecomeActive) 때만 다시 걸었더니, 앱이 앞에 있는 채로 씬 기하가 바뀌는
+    ///    경우(기기를 세로로 드는 순간, 시스템 시트나 JIT 도구를 다녀온 직후 등)에는 아무도
+    ///    다시 묻지 않아 한동안 세로로 남았다 — "중간중간 세로로 돌아간다"가 계속된 이유.
+    ///    기하 변화를 KVO 로 직접 지켜보고, 나중에 생기는 씬도 붙잡는다.
+    static func watch(_ window: UIWindow?) {
+        let center = NotificationCenter.default
+        center.addObserver(forName: UIScene.didActivateNotification, object: nil, queue: .main) { [weak window] _ in
+            observeScenes(window)
+            reassert()
+            attachToScene(window)
+        }
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+        center.addObserver(forName: UIDevice.orientationDidChangeNotification, object: nil, queue: .main) { [weak window] _ in
+            reassert()
+            attachToScene(window)
+        }
+        observeScenes(window)
+    }
+
+    private static var sceneObservations: [ObjectIdentifier: NSKeyValueObservation] = [:]
+
+    private static func observeScenes(_ window: UIWindow?) {
+        for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
+            let key = ObjectIdentifier(scene)
+            guard sceneObservations[key] == nil else { continue }
+            sceneObservations[key] = scene.observe(\.effectiveGeometry, options: [.new]) { [weak window] scene, _ in
+                DispatchQueue.main.async {
+                    if !scene.effectiveGeometry.interfaceOrientation.isLandscape { reassert() }
+                    attachToScene(window)
+                }
+            }
+        }
+    }
+
     /// 현재 마스크를 다시 건다.
     ///
     /// 앱이 잠깐 뒤로 갔다 오면(JIT 도구·공유 시트·알림 센터) 돌아온 씬이 세로로

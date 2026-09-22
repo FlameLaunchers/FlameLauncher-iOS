@@ -206,7 +206,7 @@ struct JvmSettings: Codable, Equatable {
         userDir: String,
         libraryPath: String,
         mainClass: String,
-        versionId: String,
+        javaMajor: Int,
         renderer: Renderer,
         screenSize: (Int, Int)
     ) -> [String] {
@@ -268,6 +268,15 @@ struct JvmSettings: Codable, Equatable {
         //       네이티브의 requiresTXMWorkaround 와 **같은 식**이라 기기 동작은 그대로다.
         if FlameNativeHasJITFlags([.forceMirrored, .hasTXM]) {
             args.append("-XX:+MirrorMappedCodeCache")
+            if javaMajor <= 8 {
+                // ⚠️ JRE 8 의 미러 매핑 패치는 C2 에서 RX/RW 주소를 섞는다. 실측(1.5.2):
+                //    C2 가 크기를 재려고 미리 찍어 보는 단계(Compile::scratch_emit_size)에서
+                //    재배치 간격이 두 별칭 사이 거리(정확히 160MB)로 계산돼 160MB 를 malloc
+                //    하다 죽었다. 그 앞에는 4MB 만 쓰고 "CodeCache is full" 로 JIT 이 꺼졌다.
+                //    C1 만 쓰면 그 경로를 안 탄다 — 구버전에는 C1 로 충분하다.
+                //    코드 캐시도 처음부터 전부 커밋해 둔다(확장 경로도 같은 패치를 거친다).
+                args += ["-XX:TieredStopAtLevel=1", "-XX:InitialCodeCacheSize=160M"]
+            }
         }
 
         // ⚠️ 맥에서 'Designed for iPad' 로 돌릴 때는 **JIT 을 아예 끈다.**
@@ -306,6 +315,12 @@ struct JvmSettings: Codable, Equatable {
                 //    한도를 더 조인다: 665 / 0.85 ≈ 782MB → 약 150MB 를 돌려받는다.
                 "-XX:MinHeapFreeRatio=5",
                 "-XX:MaxHeapFreeRatio=15",
+            ]
+        }
+        // ⚠️ 아래 둘은 JDK 12+ 옵션이다. Java 8 은 모르는 -XX 를 받으면 JVM 을 아예 못 만든다
+        //    ("Unrecognized VM option") — 1.16 이하가 전부 실행 즉시 죽던 원인.
+        if useG1GC && javaMajor >= 12 {
+            args += [
                 // ⚠️ 비율만 낮춰서는 부족하다. G1 은 **GC 를 할 때만** 반납한다.
                 //    할당률이 낮은 구간(로딩 끝난 뒤)에서는 GC 가 안 돌아서 커밋이
                 //    그대로 남는다. 주기적 동시 GC 를 켜서 반납 기회를 만든다.
@@ -355,7 +370,8 @@ struct JvmSettings: Codable, Equatable {
             "-XX:MaxMetaspaceSize=384M",
             "-XX:ReservedCodeCacheSize=160M",
         ] + Self.allocatorArgs() + [
-            "-Xlog:gc:stdout:time,level,tags",
+            // -Xlog 는 JDK 9+ 통합 로깅이다. Java 8 은 같은 한 줄 로그를 -verbose:gc 로 낸다.
+            javaMajor >= 9 ? "-Xlog:gc:stdout:time,level,tags" : "-verbose:gc",
             "-Duser.dir=\(userDir)",
             "-Duser.home=\(instanceDir.deletingLastPathComponent().path)",
             "-Djava.library.path=\(libraryPath)",
@@ -411,7 +427,8 @@ struct JvmSettings: Codable, Equatable {
         //
         // jar 이름을 하드코딩하지 않고 번들 폴더를 훑는다 — fetch-runtime.sh 가 가져오는
         // cacio 버전이 올라가도 여기를 고칠 일이 없다.
-        let isJava8 = VersionRules.javaMajor(versionId) <= 8
+        // ⚠️ MC 버전으로 추측하지 않고 **실제로 띄울 JRE** 로 판단한다 — 인자는 JVM 이 읽는다.
+        let isJava8 = javaMajor <= 8
         let cacioDir = Bundle.main.bundleURL
             .appending(path: isJava8 ? "libs_caciocavallo" : "libs_caciocavallo17")
         let cacioJars = ((try? FileManager.default.contentsOfDirectory(

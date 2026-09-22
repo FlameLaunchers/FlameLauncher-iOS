@@ -414,16 +414,18 @@ struct GameLauncher {
             argv += [
                 "-Dflame.main.class=\(meta.mainClass)",
                 "-Dflame.forge.plan=\(planFile.path)",
-                // 프로세서가 부르는 System.exit 를 막으려면 SecurityManager 설치가 필요하다.
-                "-Djava.security.manager=allow",
             ]
+            // 프로세서가 부르는 System.exit 를 막으려면 SecurityManager 설치가 필요하다.
+            // ⚠️ "allow" 는 JDK 12+ 에서만 특별한 값이다. Java 8 은 이걸 **클래스 이름**으로
+            //    읽고 못 찾아 JVM 이 죽는다 — 그리고 Java 8 은 이 설정 없이도 설치를 허용한다.
+            if java.majorVersion >= 12 { argv.append("-Djava.security.manager=allow") }
         }
         argv += settings.jvmArgs(
             instanceDir: dir,
             userDir: dir.path,
             libraryPath: frameworks,
             mainClass: meta.mainClass,
-            versionId: meta.mcVersion,
+            javaMajor: java.majorVersion,
             renderer: renderer,
             screenSize: (Int(screenSize.width), Int(screenSize.height))
         )
@@ -453,6 +455,14 @@ struct GameLauncher {
         var env = renderer.environment
         env["POJAV_NATIVEDIR"] = frameworks
         env["HOME"] = Paths.external.path
+        // 26.3 은 SDL 이 게임 창과 그 뷰 컨트롤러를 따로 만든다. 힌트가 없으면 SDL 은 창 크기로
+        // 방향을 정해(세로로 긴 순간이 있으면 세로 허용) 앱의 가로 고정과 어긋날 수 있다.
+        env["SDL_ORIENTATIONS"] = "LandscapeLeft LandscapeRight"
+        // 26.3 은 화면이 열리며 입력칸에 스스로 포커스를 주고(싱글플레이의 월드 검색칸 등),
+        // SDL 은 그때마다 iOS 키보드를 자동으로 띄운다 — 들어가자마자 키보드가 화면을 가렸다.
+        // 자동 표시만 끈다. 키보드는 다른 버전처럼 키보드 버튼으로 열고, 입력은 그대로 간다.
+        // ⚠️ 이 힌트만으로는 안 막힌다 — 실제 차단은 flame_sdl.m 의 flame_suppressSDLAutoKeyboard.
+        env["SDL_ENABLE_SCREEN_KEYBOARD"] = "0"
 
         // ⚠️ MobileGlues 는 "아는 런처"(FCL/ZaLith/PGW/플러그인)가 아니면 설정을 전부
         //    기본값으로 되돌린다 — compute shader·FSR1·GLSL 캐시가 통째로 꺼진다
@@ -645,6 +655,42 @@ struct GameLauncher {
 
     /// 게임 인자. 1.12 이하는 매니페스트가 준 placeholder 문자열을 치환하고,
     /// 1.13+ 는 표준 `--key value` 목록을 만든다. 안드로이드와 같은 분기.
+    /// 1.7.2 이하의 옛 에셋 배치를 만든다 — 그 시절 게임은 해시 폴더(objects/)를 모르고
+    /// **파일 이름 그대로** 찾는다. 이게 없으면 1.6~1.7.2 는 메뉴 글자가 번역 키로 나오고,
+    /// 1.5.2 이하는 소리가 전부 빠진다.
+    ///  - `virtual` (1.6~1.7.2 의 "legacy")         → assets/virtual/<id>/
+    ///  - `map_to_resources` (1.5.2 이하 "pre-1.6") → 위 + 게임 폴더의 resources/
+    /// 이미 있는 파일은 건너뛴다(하드 링크라 용량도 거의 안 든다). 돌려준 경로가 ${game_assets} 다.
+    static func prepareLegacyAssets(instanceDir: URL, indexId: String) -> URL? {
+        struct Index: Decodable {
+            struct Object: Decodable { let hash: String }
+            let objects: [String: Object]
+            let virtual: Bool?
+            let map_to_resources: Bool?
+        }
+        let assets = instanceDir.appending(path: "assets")
+        guard let data = try? Data(contentsOf: assets.appending(path: "indexes/\(indexId).json")),
+              let index = try? JSONDecoder().decode(Index.self, from: data),
+              index.virtual == true || index.map_to_resources == true
+        else { return nil }
+
+        let virtualDir = assets.appending(path: "virtual/\(indexId)")
+        var roots = [virtualDir]
+        if index.map_to_resources == true { roots.append(instanceDir.appending(path: "resources")) }
+        let fm = FileManager.default
+        for (name, object) in index.objects {
+            let source = assets.appending(path: "objects/\(object.hash.prefix(2))/\(object.hash)")
+            guard fm.fileExists(atPath: source.path) else { continue }
+            for root in roots {
+                let dest = root.appending(path: name)
+                guard !fm.fileExists(atPath: dest.path) else { continue }
+                try? fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                if (try? fm.linkItem(at: source, to: dest)) == nil { try? fm.copyItem(at: source, to: dest) }
+            }
+        }
+        return virtualDir
+    }
+
     private func buildMcArgs() -> [String] {
         let dir = meta.dir
         let username = session?.username ?? "Player"
@@ -664,7 +710,8 @@ struct GameLauncher {
                 "${auth_access_token}": accessToken,
                 "${version_name}": meta.mcVersion,
                 "${game_directory}": dir.path,
-                "${game_assets}": assetsDir,
+                "${game_assets}": Self.prepareLegacyAssets(instanceDir: dir, indexId: meta.assetIndexId)?.path
+                    ?? assetsDir,
                 "${assets_root}": assetsDir,
                 "${assets_index_name}": meta.assetIndexId,
                 "${user_type}": userType,

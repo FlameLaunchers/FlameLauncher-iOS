@@ -71,7 +71,7 @@ struct GameView: View {
                     fps: fps,
                     freeMemoryMb: freeMemoryMb,
                     onMenu: { showMenu = true },
-                    onSoftKeyboard: { showKeyboard = true },
+                    onSoftKeyboard: { showKeyboard.toggle() },
                     onCombatToggle: {
                         combatMode.toggle()
                         surface?.combatMode = combatMode
@@ -92,22 +92,27 @@ struct GameView: View {
                 )
             }
 
-            // 채팅용 소프트 키보드. 안드로이드는 InputConnection 을 직접 구현했지만,
-            // iOS 는 숨긴 TextField 하나로 같은 일을 한다(입력된 글자를 char 콜백으로 흘린다).
-            if showKeyboard {
-                ChatInputField(
-                    onChar: { runtime.sendChar($0) },
-                    onBackspace: {
-                        runtime.sendKey(GlfwKeys.backspace, action: GlfwKeys.press, mods: 0)
-                        runtime.sendKey(GlfwKeys.backspace, action: GlfwKeys.release, mods: 0)
-                    },
-                    onSubmit: {
-                        runtime.sendKey(GlfwKeys.enter, action: GlfwKeys.press, mods: 0)
-                        runtime.sendKey(GlfwKeys.enter, action: GlfwKeys.release, mods: 0)
-                        showKeyboard = false
-                    },
-                    onDismiss: { showKeyboard = false })
-            }
+            // 소프트 키보드 — 안드로이드 InputConnection 과 같은 방식. 시스템 키보드만 띄우고
+            // 친 글자·지우기·엔터를 곧바로 게임 입력칸으로 보낸다(GameKeyInputView 참고).
+            GameKeyInput(
+                active: $showKeyboard,
+                onChar: { runtime.sendChar($0) },
+                onBackspace: {
+                    runtime.sendKey(GlfwKeys.backspace, action: GlfwKeys.press, mods: 0)
+                    runtime.sendKey(GlfwKeys.backspace, action: GlfwKeys.release, mods: 0)
+                },
+                onReturn: {
+                    runtime.sendKey(GlfwKeys.enter, action: GlfwKeys.press, mods: 0)
+                    runtime.sendKey(GlfwKeys.enter, action: GlfwKeys.release, mods: 0)
+                    showKeyboard = false
+                })
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .allowsHitTesting(false)
+        }
+        // 엔터 외에도, 게임이 다시 마우스를 잡으면(ESC 로 창을 닫았다 등) 키보드를 내린다.
+        .onChange(of: isGrabbing) { _, grabbing in
+            if grabbing { showKeyboard = false }
         }
         .statusBarHidden(settings.fullscreen)
         .lockOrientation(.landscape)
@@ -293,66 +298,68 @@ struct GameView: View {
     }
 }
 
-/// 게임에 글자를 흘려 넣는 입력 오버레이.
+/// 화면에 보이지 않는 키 입력 대상 — 안드로이드 `MinecraftInputConnection` 과 같은 역할.
 ///
-/// 게임이 iOS IME 를 직접 못 받으므로 여기서 받아 GLFW 이벤트로 바꾼다.
-/// **치는 대로 바로 보낸다** — 지우면 백스페이스를, 새로 치면 그 글자를 보낸다.
-/// 그래야 게임 쪽 입력칸이 우리 칸과 같은 내용을 유지하고, 수정도 그대로 반영된다.
-/// (예전에는 버튼을 눌러야 통째로 보내서, 고치면 글자가 중복되거나 어긋났다)
-struct ChatInputField: View {
+/// 시스템 키보드만 띄우고 우리 입력칸은 두지 않는다. 친 글자는 **곧바로** 게임의 입력칸으로
+/// 가고(char 이벤트), 지우기는 백스페이스, 줄바꿈은 엔터 키로 보낸다 — 게임 칸이 유일한 원본이다.
+/// ⚠️ 예전에는 화면 아래에 우리 입력칸(보내기·닫기 버튼)을 따로 띄우고, 거기 친 내용을 게임에
+///    흘려 보냈다. 칸이 둘이라 번거롭고 게임 칸과 어긋날 여지도 있었다.
+final class GameKeyInputView: UIView, UIKeyInput {
+    var onChar: (UInt32) -> Void = { _ in }
+    var onBackspace: () -> Void = {}
+    var onReturn: () -> Void = {}
+    /// 키보드가 스스로 내려갔을 때(다른 입력칸이 포커스를 가져감 등) 상태를 맞춘다.
+    var onResign: () -> Void = {}
+
+    override var canBecomeFirstResponder: Bool { true }
+
+    /// 게임 칸에 글자가 있는지 우리는 모른다. false 면 키보드가 지우기를 보내지 않는다.
+    var hasText: Bool { true }
+
+    func insertText(_ text: String) {
+        for scalar in text.unicodeScalars {
+            if scalar == "\n" { onReturn() } else { onChar(scalar.value) }
+        }
+    }
+
+    func deleteBackward() { onBackspace() }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { onResign() }
+        return resigned
+    }
+
+    // 게임 칸에는 자동 수정·자동 대문자·스마트 따옴표가 끼어들면 안 된다.
+    var autocorrectionType: UITextAutocorrectionType = .no
+    var autocapitalizationType: UITextAutocapitalizationType = .none
+    var spellCheckingType: UITextSpellCheckingType = .no
+    var smartQuotesType: UITextSmartQuotesType = .no
+    var smartDashesType: UITextSmartDashesType = .no
+    var smartInsertDeleteType: UITextSmartInsertDeleteType = .no
+    var keyboardAppearance: UIKeyboardAppearance = .dark
+}
+
+/// `active` 가 켜져 있는 동안 `GameKeyInputView` 를 키보드 대상으로 세운다.
+struct GameKeyInput: UIViewRepresentable {
+    @Binding var active: Bool
     let onChar: (UInt32) -> Void
     let onBackspace: () -> Void
-    let onSubmit: () -> Void
-    let onDismiss: () -> Void
+    let onReturn: () -> Void
 
-    @State private var text = ""
-    @State private var sent = ""
-    @FocusState private var focused: Bool
+    func makeUIView(context: Context) -> GameKeyInputView { GameKeyInputView() }
 
-    var body: some View {
-        VStack {
-            Spacer()
-            HStack(spacing: 8) {
-                TextField("입력", text: $text)
-                    .focused($focused)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 14))
-                    .foregroundStyle(FlameColor.textMain)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .onSubmit(submit)
-                    .submitLabel(.send)
-                    .onChange(of: text) { _, new in
-                        let (removed, added) = Self.delta(from: sent, to: new)
-                        sent = new
-                        for _ in 0..<removed { onBackspace() }
-                        for scalar in added.unicodeScalars { onChar(scalar.value) }
-                    }
-                Button("보내기", action: submit)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(FlameColor.primary)
-                Button("닫기", action: onDismiss)
-                    .font(.system(size: 12))
-                    .foregroundStyle(FlameColor.textSub)
-            }
-            .padding(.horizontal, 14).padding(.vertical, 10)
-            .flameCard(radius: 12)
-            .padding(12)
+    func updateUIView(_ view: GameKeyInputView, context: Context) {
+        view.onChar = onChar
+        view.onBackspace = onBackspace
+        view.onReturn = onReturn
+        let binding = $active
+        view.onResign = { if binding.wrappedValue { DispatchQueue.main.async { binding.wrappedValue = false } } }
+        // 창에 붙은 뒤에야 키보드 대상이 될 수 있다 — 한 틱 미룬다.
+        if active, !view.isFirstResponder {
+            DispatchQueue.main.async { view.becomeFirstResponder() }
+        } else if !active, view.isFirstResponder {
+            DispatchQueue.main.async { _ = view.resignFirstResponder() }
         }
-        .onAppear { focused = true }
-    }
-
-    private func submit() {
-        // 게임 쪽에는 이미 글자가 다 들어가 있다 — 엔터만 보내면 된다.
-        text = ""
-        sent = ""
-        onSubmit()
-    }
-
-    /// 이전에 보낸 것과 지금 내용을 비교해 **지울 개수**와 **새로 넣을 글자**를 낸다.
-    /// 공통 접두어까지는 건드리지 않는다.
-    static func delta(from old: String, to new: String) -> (removed: Int, added: String) {
-        let common = zip(old, new).prefix { $0 == $1 }.count
-        return (old.count - common, String(new.dropFirst(common)))
     }
 }

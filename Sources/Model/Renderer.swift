@@ -35,9 +35,9 @@ enum Renderer: String, CaseIterable, Identifiable, Codable {
     var summary: String {
         switch self {
         case .mobileglues:
-            return "기본값. GL 구현이 가장 넓고 Zink보다 훨씬 가벼움. 셰이더가 되는 유일한 선택지. 1.17+ 권장."
+            return "기본값. GL 구현이 가장 넓고 Zink보다 훨씬 가벼움. 셰이더가 되는 유일한 선택지. 1.17 이상 전용 — 그 아래는 자동으로 GL4ES."
         case .gl4es:
-            return "OpenGL을 GLES2로 번역. 구버전(1.12 이하) 부팅용 — pre-1.13 은 자동으로 이걸 쓴다."
+            return "OpenGL을 GLES2로 번역. 구버전(1.16 이하)용 — 1.12 이하는 항상, 1.13~1.16 은 MobileGlues 대신 자동으로 쓴다."
         case .zink:
             return "OpenGL을 Vulkan(MoltenVK)으로 번역. 더 무겁고, 셰이더는 Metal 에 transform feedback 이 없어 로딩되지 않는다."
         }
@@ -90,11 +90,16 @@ enum RendererStore {
     static func load() -> Renderer { Renderer(rawValue: file.load()) ?? .mobileglues }
     static func save(_ r: Renderer) { file.save(r.rawValue) }
 
-    /// 인스턴스 설정 → 전역 기본 → pre-1.13 이면 GL4ES 강제, 순서로 해석한다.
-    /// 안드로이드 `MinecraftActivity.resolveRendererForVersion` 과 같은 규칙.
+    /// 인스턴스 설정 → 전역 기본 → 구버전이면 GL4ES, 순서로 해석한다.
+    ///
+    /// - 1.12 이하: 무엇을 골랐든 GL4ES (안드로이드 `resolveRendererForVersion` 과 같다)
+    /// - 1.13~1.16: MobileGlues 만 GL4ES 로 바꾼다. 이 버전대는 고정 기능 파이프라인
+    ///   (glMatrixMode·glBegin 등)을 쓰는데 MobileGlues 는 1.17+ 의 코어 GL 만 구현한다.
+    ///   안드로이드는 기본이 Zink 라 이 규칙이 필요 없었다 — iOS 는 기본이 MobileGlues 다.
     static func resolve(for meta: InstanceMeta) -> Renderer {
         let picked = meta.rendererId.flatMap(Renderer.init(rawValue:)) ?? load()
         if VersionRules.isPre113(meta.mcVersion) && picked != .gl4es { return .gl4es }
+        if VersionRules.isPre117(meta.mcVersion) && picked == .mobileglues { return .gl4es }
         return picked
     }
 }

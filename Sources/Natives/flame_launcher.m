@@ -25,6 +25,8 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include <os/proc.h>
+#include <mach-o/dyld.h>
+#include <sys/ucontext.h>
 
 #include "FlameNative.h"
 #include "fishhook/fishhook.h"
@@ -732,6 +734,119 @@ static void flame_installHooks(void) {
     rebind_symbols(rebindings, sizeof(rebindings) / sizeof(rebindings[0]));
 }
 
+// ── JRE 8 · TXM: GC 가 코드 캐시 RX 별칭에 쓰는 것을 RW 별칭으로 돌린다 ───────────
+//
+// 번들 JRE 8 의 libjvm 도 JIT26(미러 매핑) 패치를 받았지만 한 경로가 빠져 있다. GC 가 스택 위
+// 컴파일 코드를 훑을 때(frame::oops_code_blob_do → nmethod::oops_do) 옮긴 객체 주소를
+// nmethod 의 oops 표에 **RX 쪽 주소로** 써 넣는다. TXM 기기에서 RX 는 쓸 수 없으니 첫 GC 에서
+// SIGBUS 로 죽는다 — 실측(1.7.10): si_addr 가 nmethod oops 영역과 정확히 같았고 프레임은
+// G1ParCopyClosure::do_oop_work. JRE 17+ 는 이 경로가 고쳐져 있어 멀쩡하다.
+//
+// libjvm 안에서만 두 호출을 가로챈다(다른 이미지는 건드리지 않는다).
+//  - vm_remap  : 코드 캐시의 RX ↔ RW 두 별칭을 기록한다.
+//  - sigaction : SIGBUS/SIGSEGV 에 JVM 핸들러 대신 우리 핸들러를 건다. JVM 에게는 자기
+//                핸들러가 걸린 것처럼 보이게 한다(libjsig 와 같은 방식).
+// 우리 핸들러는 "별칭 영역에 대한 단순 정수 저장" 만 반대쪽 별칭에 대신 쓰고 다음 명령으로
+// 넘어간다. 그 밖의 모든 폴트(널 검사·세이프포인트·진짜 크래시)는 JVM 핸들러로 그대로 간다.
+static _Atomic uintptr_t flameCodeCacheA, flameCodeCacheB, flameCodeCacheSize;
+static struct sigaction flameJVMSigBus, flameJVMSigSegv;
+static kern_return_t (*flame_orig_vm_remap)(vm_map_t, vm_address_t *, vm_size_t, vm_address_t, int,
+                                            vm_map_t, vm_address_t, boolean_t, vm_prot_t *, vm_prot_t *,
+                                            vm_inherit_t);
+static int (*flame_orig_sigaction)(int, const struct sigaction *, struct sigaction *);
+
+static kern_return_t flame_hooked_vm_remap(vm_map_t target, vm_address_t *targetAddress, vm_size_t size,
+                                           vm_address_t mask, int flags, vm_map_t src, vm_address_t srcAddress,
+                                           boolean_t copy, vm_prot_t *cur, vm_prot_t *max, vm_inherit_t inherit) {
+    kern_return_t kr = flame_orig_vm_remap(target, targetAddress, size, mask, flags, src, srcAddress,
+                                           copy, cur, max, inherit);
+    // 코드 캐시 별칭만 잡는다 — 수십 MB 짜리 공유(비복사) 매핑.
+    if (kr == KERN_SUCCESS && !copy && targetAddress && size >= (16u << 20)) {
+        flameCodeCacheA = srcAddress;
+        flameCodeCacheB = *targetAddress;
+        flameCodeCacheSize = size;
+        printf("[FlameJIT8] 코드 캐시 별칭 기록: %p ↔ %p (%zu MB)\n",
+               (void *)srcAddress, (void *)*targetAddress, (size_t)(size >> 20));
+    }
+    return kr;
+}
+
+/// 폴트가 코드 캐시 별칭에 대한 단순 저장이면 반대쪽 별칭에 대신 쓰고 true.
+/// writeback 이 없는 정수 저장만 다룬다: STR/STRB/STRH(unsigned imm) · STUR* · STR*(register).
+static bool flame_emulateCodeCacheStore(siginfo_t *info, ucontext_t *uc) {
+    uintptr_t a = flameCodeCacheA, b = flameCodeCacheB, n = flameCodeCacheSize;
+    if (!n || !info || !uc) return false;
+    uintptr_t addr = (uintptr_t)info->si_addr, alias;
+    if (addr - a < n)      alias = b + (addr - a);
+    else if (addr - b < n) alias = a + (addr - b);
+    else return false;
+
+    _STRUCT_ARM_THREAD_STATE64 *ss = &uc->uc_mcontext->__ss;
+    uintptr_t pc = (uintptr_t)__darwin_arm_thread_state64_get_pc(*ss);
+    uint32_t insn = *(const uint32_t *)pc;
+    bool unsignedImm = (insn & 0x3FC00000) == 0x39000000;
+    bool unscaled    = (insn & 0x3FE00C00) == 0x38000000;
+    bool regOffset   = (insn & 0x3FE00C00) == 0x38200800;
+    if (!unsignedImm && !unscaled && !regOffset) return false;
+
+    unsigned rt = insn & 31;
+    uint64_t v = rt == 31 ? 0
+               : rt == 30 ? (uint64_t)__darwin_arm_thread_state64_get_lr(*ss)
+               : rt == 29 ? (uint64_t)__darwin_arm_thread_state64_get_fp(*ss)
+               : ss->__x[rt];
+    switch (insn >> 30) {   // 0=1B 1=2B 2=4B 3=8B
+        case 0: *(volatile uint8_t  *)alias = (uint8_t)v;  break;
+        case 1: *(volatile uint16_t *)alias = (uint16_t)v; break;
+        case 2: *(volatile uint32_t *)alias = (uint32_t)v; break;
+        default: *(volatile uint64_t *)alias = v;          break;
+    }
+    __darwin_arm_thread_state64_set_pc_fptr(*ss, (void *)(pc + 4));
+
+    // 동작 확인용 한 줄(처음 한 번만). 시그널 문맥이라 printf 대신 write 를 쓴다.
+    static atomic_flag announced = ATOMIC_FLAG_INIT;
+    if (!atomic_flag_test_and_set(&announced)) {
+        static const char msg[] = "[FlameJIT8] 첫 코드 캐시 쓰기를 RW 별칭으로 보정했습니다\n";
+        write(STDOUT_FILENO, msg, sizeof msg - 1);
+    }
+    return true;
+}
+
+static void flame_codeCacheFault(int sig, siginfo_t *info, void *ctx) {
+    if (flame_emulateCodeCacheStore(info, (ucontext_t *)ctx)) return;
+    struct sigaction *jvm = sig == SIGBUS ? &flameJVMSigBus : &flameJVMSigSegv;
+    if (jvm->sa_flags & SA_SIGINFO) { jvm->sa_sigaction(sig, info, ctx); return; }
+    if (jvm->sa_handler != SIG_DFL && jvm->sa_handler != SIG_IGN) { jvm->sa_handler(sig); return; }
+    signal(sig, SIG_DFL);   // JVM 핸들러가 아직 없다 — 기본 동작(종료)으로 다시 폴트나게 둔다
+}
+
+static int flame_hooked_sigaction(int sig, const struct sigaction *act, struct sigaction *old) {
+    if (sig != SIGBUS && sig != SIGSEGV) return flame_orig_sigaction(sig, act, old);
+    struct sigaction *saved = sig == SIGBUS ? &flameJVMSigBus : &flameJVMSigSegv;
+    struct sigaction previous = *saved;
+    if (act) {
+        struct sigaction ours = *act;
+        ours.sa_sigaction = flame_codeCacheFault;
+        ours.sa_flags = act->sa_flags | SA_SIGINFO;
+        if (flame_orig_sigaction(sig, &ours, NULL) != 0) return -1;
+        *saved = *act;
+    }
+    if (old) *old = previous;   // JVM 에게는 자기가 건 핸들러가 보인다
+    return 0;
+}
+
+static void flame_rebindIfLibJVM(const struct mach_header *mh, intptr_t slide) {
+    Dl_info info;
+    if (!dladdr(mh, &info) || !info.dli_fname) return;
+    const char *name = strrchr(info.dli_fname, '/');
+    if (!name || strcmp(name, "/libjvm.dylib") != 0) return;
+    struct rebinding r[] = {
+        { "vm_remap", flame_hooked_vm_remap, (void *)&flame_orig_vm_remap },
+        { "sigaction", flame_hooked_sigaction, (void *)&flame_orig_sigaction },
+    };
+    rebind_symbols_image((void *)mh, slide, r, sizeof r / sizeof r[0]);
+    printf("[FlameJIT8] libjvm 코드 캐시 쓰기 보정 설치\n");
+}
+
 int FlameNativeLaunchJVM(const char *javaHome, const char *_Nonnull *_Nonnull argv, int argc) {
     @autoreleasepool {
 
@@ -855,6 +970,12 @@ int FlameNativeLaunchJVM(const char *javaHome, const char *_Nonnull *_Nonnull ar
         NSString *jli8 = [home stringByAppendingPathComponent:@"lib/jli/libjli.dylib"];
         NSString *jli11 = [home stringByAppendingPathComponent:@"lib/libjli.dylib"];
         NSString *jliPath = [fm fileExistsAtPath:jli8] ? jli8 : jli11;
+
+        // JRE 8(lib/jli 배치) + TXM 이면 libjvm 이 올라오는 순간 코드 캐시 쓰기 보정을 건다.
+        // libjvm 은 아래 JLI_Launch 가 연다 — 그 전에 콜백을 등록해 둔다.
+        if (requiresTXMWorkaround && jliPath == jli8) {
+            _dyld_register_func_for_add_image(flame_rebindIfLibJVM);
+        }
 
         if (![fm fileExistsAtPath:jliPath]) {
             printf("[FlameLauncher] libjli.dylib 을 찾지 못했습니다: %s\n", jliPath.UTF8String);

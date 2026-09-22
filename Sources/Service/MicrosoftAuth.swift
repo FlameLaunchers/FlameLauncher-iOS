@@ -14,7 +14,10 @@ struct AuthSession: Codable {
     var isValid: Bool { Date().timeIntervalSince1970 * 1000 < expiresAt - 60_000 }
 
     /// 스킨 얼굴 이미지. 안드로이드 `loadSkinFace` 가 하던 일.
-    var faceURL: URL? { URL(string: "https://crafatar.com/avatars/\(uuid)?size=128&overlay") }
+    /// 스킨 얼굴(모자 레이어 포함). 안드로이드 `loadSkinFace` 와 같은 서비스다.
+    /// ⚠️ Crafatar 는 쓰지 않는다 — 500 을 내면서 **기본 스킨(Alex) 얼굴**을 돌려줘서, 로그인해도
+    ///    내 스킨이 안 보였다(실측 2026-09-22). 이것도 끊기면 Mojang sessionserver 의 텍스처로 옮긴다.
+    var faceURL: URL? { URL(string: "https://mc-heads.net/avatar/\(uuid)/128") }
 }
 
 /// Microsoft → Xbox Live → XSTS → Minecraft 토큰 체인.

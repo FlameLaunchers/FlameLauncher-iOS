@@ -98,6 +98,11 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         UIUserInterfaceStyle: Dark
+        # 게임 모드(iOS 18+): 앱이 앞에 있는 동안 CPU·GPU 를 몰아주고 백그라운드 작업을 줄이며
+        # 컨트롤러·AirPods 지연을 낮춘다. 런처 화면부터 켜진다(앱 자체가 게임으로 분류된다).
+        # ⚠️ 홈 인디케이터와는 무관하다 — 그건 FlameHostingController 가 정한다.
+        LSApplicationCategoryType: public.app-category.games
+        GCSupportsGameMode: true
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         NSMicrophoneUsageDescription: "인게임 음성 채팅 모드에서 마이크를 사용합니다."

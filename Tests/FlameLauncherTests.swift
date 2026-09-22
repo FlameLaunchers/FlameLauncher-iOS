@@ -233,28 +233,24 @@ final class FlameLauncherTests: XCTestCase {
                        "net/neoforged/neoform/1.21.1-20240808/neoform-1.21.1-20240808.zip")
     }
 
-    /// 입력창은 친 대로 게임에 흘려 넣는다. 지운 만큼만 백스페이스를 보내야
-    /// 게임 쪽 칸이 우리 칸과 같아진다.
-    func testChatDelta() {
-        // 이어서 치기 — 지울 것 없음
-        var d = ChatInputField.delta(from: "hello", to: "hello world")
-        XCTAssertEqual(d.removed, 0)
-        XCTAssertEqual(d.added, " world")
+    /// 보이지 않는 키 입력 대상은 친 글자를 그대로, 줄바꿈은 엔터로, 지우기는 백스페이스로 보낸다.
+    func testGameKeyInputMapsKeys() {
+        let view = GameKeyInputView()
+        var chars: [UInt32] = []
+        var backspaces = 0
+        var returns = 0
+        view.onChar = { chars.append($0) }
+        view.onBackspace = { backspaces += 1 }
+        view.onReturn = { returns += 1 }
 
-        // 뒤를 지움
-        d = ChatInputField.delta(from: "hello", to: "hel")
-        XCTAssertEqual(d.removed, 2)
-        XCTAssertEqual(d.added, "")
+        view.insertText("가a")
+        view.deleteBackward()
+        view.insertText("\n")
 
-        // 중간을 고침 — 공통 접두어 뒤를 전부 다시 넣는다
-        d = ChatInputField.delta(from: "playfarm", to: "playgame")
-        XCTAssertEqual(d.removed, 4)
-        XCTAssertEqual(d.added, "game")
-
-        // 통째로 비움
-        d = ChatInputField.delta(from: "abc", to: "")
-        XCTAssertEqual(d.removed, 3)
-        XCTAssertEqual(d.added, "")
+        XCTAssertEqual(chars, [0xAC00, 0x61])
+        XCTAssertEqual(backspaces, 1)
+        XCTAssertEqual(returns, 1)
+        XCTAssertTrue(view.hasText, "false 면 키보드가 지우기를 보내지 않는다")
     }
 
     func testMavenPath() {
@@ -299,7 +295,7 @@ final class FlameLauncherTests: XCTestCase {
     func testG1LeavesRoomForLiveData() {
         let args = JvmSettings().jvmArgs(
             instanceDir: Paths.instance("t"), userDir: "/tmp", libraryPath: "/lib",
-            mainClass: "Main", versionId: "1.21.1", renderer: .mobileglues,
+            mainClass: "Main", javaMajor: 21, renderer: .mobileglues,
             screenSize: (1920, 1080))
         func percent(_ flag: String) -> Int? {
             args.first { $0.hasPrefix("-XX:\(flag)=") }
@@ -317,7 +313,7 @@ final class FlameLauncherTests: XCTestCase {
     func testMirroredCodeCacheFollowsCapabilityNotOSVersion() {
         let args = JvmSettings().jvmArgs(
             instanceDir: Paths.instance("t"), userDir: "/tmp", libraryPath: "/lib",
-            mainClass: "Main", versionId: "1.21.1", renderer: .mobileglues,
+            mainClass: "Main", javaMajor: 21, renderer: .mobileglues,
             screenSize: (1920, 1080))
         let asked = args.contains("-XX:+MirrorMappedCodeCache")
         let needed = FlameNativeHasJITFlags([.forceMirrored, .hasTXM])
@@ -332,38 +328,67 @@ final class FlameLauncherTests: XCTestCase {
 
     }
 
+    /// 1.7.2 이하는 에셋을 해시 폴더가 아니라 이름으로 찾는다 — 옛 배치가 없으면
+    /// 1.6~1.7.2 는 글자가 번역 키로, 1.5.2 이하는 소리 없이 뜬다.
+    func testLegacyAssetsAreLaidOutByName() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appending(path: "legacy-assets-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: dir) }
+        let hash = "0123456789abcdef0123456789abcdef01234567"
+        let object = dir.appending(path: "assets/objects/01/\(hash)")
+        try fm.createDirectory(at: object.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("en".utf8).write(to: object)
+        let index = dir.appending(path: "assets/indexes/pre-1.6.json")
+        try fm.createDirectory(at: index.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"{"map_to_resources":true,"objects":{"lang/en_US.lang":{"hash":"\#(hash)","size":2}}}"#.utf8)
+            .write(to: index)
+
+        let root = GameLauncher.prepareLegacyAssets(instanceDir: dir, indexId: "pre-1.6")
+        XCTAssertEqual(root?.lastPathComponent, "pre-1.6")
+        XCTAssertTrue(fm.fileExists(atPath: dir.appending(path: "assets/virtual/pre-1.6/lang/en_US.lang").path))
+        XCTAssertTrue(fm.fileExists(atPath: dir.appending(path: "resources/lang/en_US.lang").path))
+        // 요즘 인덱스(virtual 아님)는 건드리지 않는다.
+        XCTAssertNil(GameLauncher.prepareLegacyAssets(instanceDir: dir, indexId: "없음"))
+    }
+
     // MARK: - JVM 인자
 
     /// JRE9+ 에 `-Xbootclasspath/p:` 가 들어가면 JNI_CreateJavaVM 이 -6 으로 거부한다.
     func testJvmArgsCacioSplit() {
         let settings = JvmSettings()
-        func args(_ version: String) -> [String] {
+        func args(_ javaMajor: Int) -> [String] {
             settings.jvmArgs(
                 instanceDir: Paths.instance("t"), userDir: "/tmp",
-                libraryPath: "/lib", mainClass: "Main", versionId: version,
+                libraryPath: "/lib", mainClass: "Main", javaMajor: javaMajor,
                 renderer: .zink, screenSize: (1920, 1080)
             )
         }
-        XCTAssertTrue(args("1.12.2").contains { $0.hasPrefix("-Xbootclasspath/p:") })
-        XCTAssertFalse(args("1.21.4").contains { $0.hasPrefix("-Xbootclasspath/p:") })
-        XCTAssertTrue(args("1.21.4").contains { $0.hasPrefix("-Xbootclasspath/a:") })
+        XCTAssertTrue(args(8).contains { $0.hasPrefix("-Xbootclasspath/p:") })
+        XCTAssertFalse(args(21).contains { $0.hasPrefix("-Xbootclasspath/p:") })
+        XCTAssertTrue(args(21).contains { $0.hasPrefix("-Xbootclasspath/a:") })
+
+        // Java 8 은 모르는 옵션 하나에 JVM 생성을 통째로 거부한다 — 1.16 이하가 전부 죽던 원인.
+        let java8 = args(8)
+        for jdk9Only in ["-Xlog", "-XX:G1PeriodicGC", "-XX:+G1PeriodicGC", "--add-"] {
+            XCTAssertFalse(java8.contains { $0.hasPrefix(jdk9Only) }, "Java 8 이 모르는 옵션: \(jdk9Only)")
+        }
 
         // 렌더러 libname 은 **JVM 인자로도** 내보내야 한다. 네이티브 브릿지가
         // System.setProperty 로 심기는 하지만 org.lwjgl.opengl.GL 이 먼저 <clinit> 되면
         // 그 시점 값으로 굳어버려서 "Core OpenGL functions could not be found" 가 났다.
-        XCTAssertTrue(args("1.21.4").contains("-Dorg.lwjgl.opengl.libname=\(Renderer.zink.libName)"))
+        XCTAssertTrue(args(21).contains("-Dorg.lwjgl.opengl.libname=\(Renderer.zink.libName)"))
 
         // 클래스패스는 JLI_Launch 에 -cp 로 넘긴다 — -D 로 중복 지정하지 않는다.
-        XCTAssertFalse(args("1.21.4").contains { $0.hasPrefix("-Djava.class.path") })
+        XCTAssertFalse(args(21).contains { $0.hasPrefix("-Djava.class.path") })
 
         // toRealPath 를 살리는 에이전트가 반드시 붙어야 한다 — 빠지면 Cobblemon 같은
         // 모드가 "Invalid CommonJS root folder" 로 죽는다.
-        XCTAssertTrue(args("1.21.1").contains { $0.hasSuffix("libs/flame_bootstrap.jar") },
+        XCTAssertTrue(args(21).contains { $0.hasSuffix("libs/flame_bootstrap.jar") },
                       "IosFsAgent 가 -javaagent 로 붙지 않았습니다")
 
         // iOS 전용: 메인 스레드를 JVM 에 못 주므로 LWJGL 의 첫-스레드 검사를 꺼야 한다.
-        XCTAssertTrue(args("1.21.4").contains("-Dorg.lwjgl.glfw.checkThread0=false"))
-        XCTAssertTrue(args("1.21.4").contains("-XX:+DisablePrimordialThreadGuardPages"))
+        XCTAssertTrue(args(21).contains("-Dorg.lwjgl.glfw.checkThread0=false"))
+        XCTAssertTrue(args(21).contains("-XX:+DisablePrimordialThreadGuardPages"))
     }
 
     /// 렌더러 dylib 이름은 네이티브(flame_environ.h 의 RENDERER_NAME_*)와 같아야 한다.
@@ -594,7 +619,7 @@ final class FlameLauncherTests: XCTestCase {
         let bundleFrameworks = Bundle.main.bundleURL.appending(path: "Frameworks").path
         let args = JvmSettings().jvmArgs(
             instanceDir: dir, userDir: dir.path, libraryPath: bundleFrameworks,
-            mainClass: "net.minecraft.client.main.Main", versionId: "26.2",
+            mainClass: "net.minecraft.client.main.Main", javaMajor: 25,
             renderer: .mobileglues, screenSize: (800, 600))
 
         let extract = args.filter { $0.hasPrefix("-Dorg.lwjgl.system.SharedLibraryExtract") }

@@ -17,6 +17,7 @@
 
 #import <UIKit/UIKit.h>   // flame_environ.h 가 CALayer 를 쓴다
 #include <dlfcn.h>
+#import <objc/runtime.h>
 #include <stdio.h>
 
 #include "flame_environ.h"
@@ -51,6 +52,34 @@ static void flame_exceptionHandler(NSException *e) {
         printf("[FlameExc]   %s\n", frame.UTF8String);
     }
     fflush(stdout);
+}
+
+/// SDL 의 숨은 입력칸이 소프트 키보드를 스스로 띄우지 못하게 한다.
+///
+/// 26.3 은 화면이 열리면서 입력칸에 스스로 포커스를 준다(싱글플레이의 월드 검색칸 등).
+/// 그러면 SDL 이 -[SDL_uikitviewcontroller startTextInput] 에서 숨겨 둔 UITextField 를
+/// 첫 응답자로 세우고, iOS 는 그 순간 키보드를 띄운다 — 들어가자마자 키보드가 화면을 가렸다.
+/// ⚠️ SDL_ENABLE_SCREEN_KEYBOARD=0 으로는 안 막힌다(실측). uikit 백엔드는 StartTextInput
+///    자체가 becomeFirstResponder 라서, 힌트가 막는 ShowScreenKeyboard 를 거치지 않는다.
+/// 빈 inputView 를 달면 첫 응답자는 되되(하드웨어 키보드 입력은 그대로) 소프트 키보드는 안 뜬다.
+/// 소프트 키보드는 화면의 키보드 버튼(GameKeyInputView)으로 연다 — 다른 버전과 같다.
+static void flame_suppressSDLAutoKeyboard(void) {
+    Class vc = NSClassFromString(@"SDL_uikitviewcontroller");
+    SEL sel = NSSelectorFromString(@"startTextInput");
+    Method method = vc ? class_getInstanceMethod(vc, sel) : NULL;
+    Ivar ivar = vc ? class_getInstanceVariable(vc, "textField") : NULL;
+    if (!method || !ivar) {
+        printf("[FlameSDL] 키보드 자동 표시를 못 막았습니다 (method=%p ivar=%p)\n",
+               (void *)method, (void *)ivar);
+        return;
+    }
+    bool (*original)(id, SEL) = (bool (*)(id, SEL))method_getImplementation(method);
+    method_setImplementation(method, imp_implementationWithBlock(^bool(id self) {
+        UITextField *field = object_getIvar(self, ivar);
+        if (field && !field.inputView) field.inputView = [[UIView alloc] initWithFrame:CGRectZero];
+        return original(self, sel);
+    }));
+    printf("[FlameSDL] 입력칸 포커스 때 키보드 자동 표시를 끕니다\n");
 }
 
 void flame_probeSDL3(void) {
@@ -93,6 +122,7 @@ void flame_probeSDL3(void) {
     int v = getVersion();
     printf("[FlameSDL] dlopen 성공 · SDL %d.%d.%d\n",
            v / 1000000, (v / 1000) % 1000, v % 1000);
+    flame_suppressSDLAutoKeyboard();
 
     if (numDrivers && driverName) {
         int n = numDrivers();

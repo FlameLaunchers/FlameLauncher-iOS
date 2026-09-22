@@ -279,3 +279,88 @@ Java_sun_awt_UNIXToolkit_unload_1gtk(JNIEnv *env, jclass klass)
 
 
 
+
+// ── JDK 8 전용: 글꼴 네이티브 ───────────────────────────────────────────────
+//
+// JDK 8 은 headful 일 때 글꼴 네이티브도 libawt_xawt 에서 찾는다(JDK 9+ 는 다른 곳으로 옮겼다).
+// 여기 없으면 1.5.2 이하처럼 java.awt.Frame 을 직접 만드는 버전이
+//   UnsatisfiedLinkError: java.awt.Font.initIDs()V
+// 로 즉시 죽는다(실측). 진짜 구현은 같은 JRE 의 libawt_headless 에 있으니 그쪽으로 넘긴다.
+// (JDK 17+ 는 앞서 올라온 라이브러리에서 먼저 찾으므로 이 함수들이 쓰이지 않는다)
+#include <dlfcn.h>
+#include <limits.h>
+#include <string.h>
+
+static void *flame_headless(const char *symbol) {
+    static void *handle;
+    if (!handle) {
+        Dl_info info;
+        if (!dladdr((void *)flame_headless, &info) || !info.dli_fname) return NULL;
+        char path[PATH_MAX];
+        strlcpy(path, info.dli_fname, sizeof path);   // <jre>/lib/libawt_xawt.dylib
+        char *slash = strrchr(path, '/');
+        if (!slash) return NULL;
+        strlcpy(slash + 1, "libawt_headless.dylib", sizeof path - (size_t)(slash + 1 - path));
+        handle = dlopen(path, RTLD_LAZY | RTLD_LOCAL);
+        if (!handle) return NULL;
+    }
+    return dlsym(handle, symbol);
+}
+
+#define FLAME_FORWARD_VOID(name, params, args) \
+    JNIEXPORT void JNICALL name params { \
+        void (*f) params = flame_headless(#name); \
+        if (f) f args; \
+    }
+
+FLAME_FORWARD_VOID(Java_java_awt_Font_initIDs, (JNIEnv *env, jclass cls), (env, cls))
+FLAME_FORWARD_VOID(Java_sun_awt_FontDescriptor_initIDs, (JNIEnv *env, jclass cls), (env, cls))
+FLAME_FORWARD_VOID(Java_sun_awt_PlatformFont_initIDs, (JNIEnv *env, jclass cls), (env, cls))
+FLAME_FORWARD_VOID(Java_sun_font_FontConfigManager_getFontConfig,
+                   (JNIEnv *env, jclass cls, jstring locale, jobject info, jobjectArray fonts, jboolean fallbacks),
+                   (env, cls, locale, info, fonts, fallbacks))
+
+JNIEXPORT jint JNICALL
+Java_sun_font_FontConfigManager_getFontConfigAASettings(JNIEnv *env, jclass cls, jstring locale, jstring fcFamily)
+{
+    jint (*f)(JNIEnv *, jclass, jstring, jstring) = flame_headless(__func__);
+    return f ? f(env, cls, locale, fcFamily) : -1;
+}
+
+JNIEXPORT jint JNICALL
+Java_sun_font_FontConfigManager_getFontConfigVersion(JNIEnv *env, jclass cls)
+{
+    jint (*f)(JNIEnv *, jclass) = flame_headless(__func__);
+    return f ? f(env, cls) : 0;
+}
+
+JNIEXPORT jstring JNICALL
+Java_sun_awt_FcFontManager_getFontPathNative(JNIEnv *env, jobject self, jboolean noType1, jboolean isX11GE)
+{
+    jstring (*f)(JNIEnv *, jobject, jboolean, jboolean) = flame_headless(__func__);
+    return f ? f(env, self, noType1, isX11GE) : (*env)->NewStringUTF(env, "");
+}
+
+// JDK 8 의 libfontmanager 는 X11 글꼴 함수(AWTCountFonts · AWTLoadFont 등 17개)를 **이름으로**
+// (flat lookup) 찾는다. 데스크톱에서는 libawt_xawt 가 내보내는데 이 스텁에는 없어서 주소 0 으로
+// 묶였고, NativeFont.fontExists 에서 pc=0 으로 죽었다(실측, 1.5.2). headless 판이 17개를 모두
+// 갖고 있으므로 스텁이 올라오는 순간 **전역(RTLD_GLOBAL)** 으로 같이 올린다. libfontmanager 는
+// 그 뒤에 올라온다(FontManagerNativeLibrary 가 awt → fontmanager 순으로 연다).
+// JDK 9+ 에는 이 경로가 없으므로 JDK 8(lib/jli/ 배치)일 때만 한다.
+#include <stdio.h>
+#include <unistd.h>
+
+__attribute__((constructor)) static void flame_exposeHeadlessFontsForJDK8(void) {
+    Dl_info info;
+    if (!dladdr((void *)flame_exposeHeadlessFontsForJDK8, &info) || !info.dli_fname) return;
+    char dir[PATH_MAX];
+    strlcpy(dir, info.dli_fname, sizeof dir);
+    char *slash = strrchr(dir, '/');
+    if (!slash) return;
+    *slash = '\0';
+    char path[PATH_MAX];
+    snprintf(path, sizeof path, "%s/jli/libjli.dylib", dir);
+    if (access(path, F_OK) != 0) return;
+    snprintf(path, sizeof path, "%s/libawt_headless.dylib", dir);
+    dlopen(path, RTLD_NOW | RTLD_GLOBAL);
+}

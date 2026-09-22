@@ -37,6 +37,7 @@ final class FlameAppDelegate: UIResponder, UIApplicationDelegate {
         // ⚠️ 이 시점의 UIScreen.main.bounds 는 아직 세로일 수 있다. 씬에 붙여 기하를
         //    따라가게 한다 — 안 그러면 세로 프레임이 그대로 굳는다(OrientationLock 참고).
         OrientationLock.attachToScene(window)
+        OrientationLock.watch(window)
 
         Task { @MainActor in
             await AuthStore.shared.restore()
@@ -80,6 +81,10 @@ final class FlameHostingController<Content: View>: UIHostingController<Content> 
     //    `prefersHomeIndicatorAutoHidden` 과 정면으로 싸우는 설정이다.
     //    (SwiftUI 상속값이 0xa = left|right 라 아래에서 비운다. 자세한 사정은 GameView)
     override var prefersHomeIndicatorAutoHidden: Bool { true }
+
+    // 앱 전체 가로 고정 — 뿌리 컨트롤러도 스스로 가로만 답한다(마스크·Info.plist 와 같은 값).
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }
+    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .landscapeRight }
 
     // ⚠️ 상속하면 `.left | .right`(0xa) 가 나온다 — SwiftUI 기본값이다.
     //    하나라도 지연하면 인디케이터가 안 사라지므로 비운다(GameView 주석 참고).
