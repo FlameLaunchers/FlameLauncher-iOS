@@ -42,7 +42,7 @@ struct KeyLayoutEditorView: View {
                 if let selected { inspector(selected).padding(12) }
             }
         }
-        .navigationTitle("키 배치 편집")
+        .navigationTitle(String(localized: "키 배치 편집"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(FlameColor.bgSurface, for: .navigationBar)
         .toolbar {
@@ -92,8 +92,8 @@ struct KeyLayoutEditorView: View {
                 .foregroundStyle(FlameColor.textMain)
 
             HStack(spacing: 8) {
-                stepper("가로", value: button.width) { resize(button.id, dw: $0, dh: 0) }
-                stepper("세로", value: button.height) { resize(button.id, dw: 0, dh: $0) }
+                stepper(String(localized: "가로"), value: button.width) { resize(button.id, dw: $0, dh: 0) }
+                stepper(String(localized: "세로"), value: button.height) { resize(button.id, dw: 0, dh: $0) }
             }
 
             HStack(spacing: 8) {
@@ -253,7 +253,7 @@ private struct AddKeySheet: View {
                     .padding(16)
                 }
             }
-            .navigationTitle("키 추가")
+            .navigationTitle(String(localized: "키 추가"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(FlameColor.bgSurface, for: .navigationBar)
             .toolbar {

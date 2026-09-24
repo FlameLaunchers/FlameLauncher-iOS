@@ -140,8 +140,8 @@ struct ContentDetailView: View {
 
             if files.isEmpty && !isLoading {
                 Text(showAllVersions || isPack
-                     ? "설치 가능한 파일이 없어요"
-                     : "이 인스턴스에 맞는 빌드가 없어요 — '모든 버전' 을 켜면 전부 보입니다")
+                     ? String(localized: "설치 가능한 파일이 없어요")
+                     : String(localized: "이 인스턴스에 맞는 빌드가 없어요 — '모든 버전' 을 켜면 전부 보입니다"))
                     .font(.system(size: 12)).foregroundStyle(FlameColor.textSub)
             }
 
@@ -230,7 +230,7 @@ struct ContentDetailView: View {
                 }
                 result = message
             } else {
-                result = "먼저 인스턴스를 하나 만들어 주세요."
+                result = String(localized: "먼저 인스턴스를 하나 만들어 주세요.")
             }
         } catch {
             progress = DownloadProgress(phase: .error, error: error.localizedDescription)

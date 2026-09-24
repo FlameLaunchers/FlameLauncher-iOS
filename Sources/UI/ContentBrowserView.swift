@@ -25,7 +25,7 @@ struct ContentBrowserView: View {
                 list
             }
         }
-        .navigationTitle("추가 콘텐츠")
+        .navigationTitle(String(localized: "추가 콘텐츠"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(FlameColor.bgSurface, for: .navigationBar)
         .task { await search() }
@@ -87,7 +87,7 @@ struct ContentBrowserView: View {
 
             HStack(spacing: 8) {
                 Text("🔎").font(.system(size: 14))
-                TextField("검색", text: $query)
+                TextField(String(localized: "검색"), text: $query)
                     .font(.system(size: 13))
                     .foregroundStyle(FlameColor.textMain)
                     .autocorrectionDisabled()
@@ -114,8 +114,8 @@ struct ContentBrowserView: View {
                 Text(source == .curseforge && !CurseForgeAPI.isConfigured ? "🔑" : "🫥")
                     .font(.system(size: 40))
                 Text(source == .curseforge && !CurseForgeAPI.isConfigured
-                     ? "CurseForge API 키가 없습니다. Info.plist 의 CURSEFORGE_API_KEY 를 채워주세요."
-                     : "검색 결과가 없어요")
+                     ? String(localized: "CurseForge API 키가 없습니다. Info.plist 의 CURSEFORGE_API_KEY 를 채워주세요.")
+                     : String(localized: "검색 결과가 없어요"))
                     .font(.system(size: 13)).foregroundStyle(FlameColor.textSub)
                     .multilineTextAlignment(.center)
             }

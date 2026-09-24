@@ -92,7 +92,7 @@ struct CrashReportView: View {
                 }
             }
         }
-        .navigationTitle("크래시 리포트")
+        .navigationTitle(String(localized: "크래시 리포트"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(FlameColor.bgSurface, for: .navigationBar)
         .onAppear(perform: load)

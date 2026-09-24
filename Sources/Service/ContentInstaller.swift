@@ -16,7 +16,7 @@ struct ContentInstaller {
                      into meta: InstanceMeta) async throws {
         guard let urlString = file.downloadURL else {
             throw LoaderInstallError.unsupported(
-                "이 파일은 배포자가 서드파티 다운로드를 막아둬서 앱에서 받을 수 없습니다."
+                String(localized: "이 파일은 배포자가 서드파티 다운로드를 막아둬서 앱에서 받을 수 없습니다.")
             )
         }
         onProgress(DownloadProgress(phase: .installingLoader, fileName: file.fileName))
@@ -101,8 +101,8 @@ struct ContentInstaller {
             return name.hasPrefix("iris") || name.hasPrefix("oculus")
         }
         guard !hasIris else { return nil }
-        return "이 인스턴스에 Iris 가 없어서 게임이 셰이더를 읽지 못합니다. "
-             + "모드 탭에서 Iris 를 먼저 설치하고, 렌더러는 Zink 를 쓰세요."
+        return String(localized: "이 인스턴스에 Iris 가 없어서 게임이 셰이더를 읽지 못합니다. ")
+             + String(localized: "모드 탭에서 Iris 를 먼저 설치하고, 렌더러는 Zink 를 쓰세요.")
     }
 
     // MARK: - 모드팩 → 새 인스턴스
@@ -116,7 +116,7 @@ struct ContentInstaller {
         _ item: ContentItem, file: ContentFile, versions: [VersionEntry]
     ) async throws -> InstanceMeta {
         guard let urlString = file.downloadURL else {
-            throw LoaderInstallError.unsupported("다운로드 URL 이 없습니다.")
+            throw LoaderInstallError.unsupported(String(localized: "다운로드 URL 이 없습니다."))
         }
 
         onProgress(DownloadProgress(phase: .installingLoader, fileName: file.fileName))
@@ -215,7 +215,7 @@ struct ContentInstaller {
 
         guard CurseForgeAPI.isConfigured else {
             throw LoaderInstallError.unsupported(
-                "CurseForge 모드팩은 API 키가 있어야 파일을 받을 수 있습니다.")
+                String(localized: "CurseForge 모드팩은 API 키가 있어야 파일을 받을 수 있습니다."))
         }
 
         // "fabric-0.16.9" 처럼 로더와 버전이 한 문자열에 붙어 있다.

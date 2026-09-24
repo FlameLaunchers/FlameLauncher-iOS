@@ -35,11 +35,11 @@ enum Renderer: String, CaseIterable, Identifiable, Codable {
     var summary: String {
         switch self {
         case .mobileglues:
-            return "기본값. GL 구현이 가장 넓고 Zink보다 훨씬 가벼움. 셰이더가 되는 유일한 선택지. 1.17 이상 전용 — 그 아래는 자동으로 GL4ES."
+            return String(localized: "기본값. GL 구현이 가장 넓고 Zink보다 훨씬 가벼움. 셰이더가 되는 유일한 선택지. 1.17 이상 전용 — 그 아래는 자동으로 GL4ES.")
         case .gl4es:
-            return "OpenGL을 GLES2로 번역. 구버전(1.16 이하)용 — 1.12 이하는 항상, 1.13~1.16 은 MobileGlues 대신 자동으로 쓴다."
+            return String(localized: "OpenGL을 GLES2로 번역. 구버전(1.16 이하)용 — 1.12 이하는 항상, 1.13~1.16 은 MobileGlues 대신 자동으로 쓴다.")
         case .zink:
-            return "OpenGL을 Vulkan(MoltenVK)으로 번역. 더 무겁고, 셰이더는 Metal 에 transform feedback 이 없어 로딩되지 않는다."
+            return String(localized: "OpenGL을 Vulkan(MoltenVK)으로 번역. 더 무겁고, 셰이더는 Metal 에 transform feedback 이 없어 로딩되지 않는다.")
         }
     }
 

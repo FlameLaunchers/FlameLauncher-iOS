@@ -4,6 +4,8 @@ options:
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
+  # 시스템 언어가 한국어면 한국어, 그 밖에는 영어(개발 언어)로 뜬다.
+  developmentLanguage: en
 
 settings:
   base:
@@ -70,6 +72,10 @@ targets:
       # 처리하고 RX 영역을 대신 할당해 준다 (Amethyst-iOS, GPL-3.0).
       - path: Resources/UniversalJIT26.js
       - path: Resources/UniversalJIT26Extension.js
+      # 영어·한국어 두 갈래. 키는 소스에 적힌 한국어 문구이고, 시스템 언어가 한국어가
+      # 아니면 en 쪽(영어)이 쓰인다. 자세한 건 Localizable.strings 머리말 참고.
+      - path: Resources/en.lproj/Localizable.strings
+      - path: Resources/ko.lproj/Localizable.strings
       # iOS(arm64) OpenJDK. 번들에 넣어두면 사용자가 따로 준비할 게 없다.
       # 기기 Documents/runtimes/ 에 넣은 JRE 가 있으면 그쪽이 우선한다.
       - path: Runtime/java_runtimes

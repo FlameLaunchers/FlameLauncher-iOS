@@ -53,12 +53,12 @@ final class Terracotta {
 
     /// 테라코타가 보고하는 오류 종류. 순서가 곧 프로토콜의 정수값이다 — 바꾸지 말 것.
     private static let exceptionMessages = [
-        "방장에게 연결하지 못했습니다",
-        "방장과의 연결이 끊어졌습니다",
-        "게스트 쪽 네트워크가 중단됐습니다",
-        "방장 쪽 네트워크가 중단됐습니다",
-        "서버와의 연결이 끊어졌습니다",
-        "중계 서버가 잘못된 응답을 보냈습니다",
+        String(localized: "방장에게 연결하지 못했습니다"),
+        String(localized: "방장과의 연결이 끊어졌습니다"),
+        String(localized: "게스트 쪽 네트워크가 중단됐습니다"),
+        String(localized: "방장 쪽 네트워크가 중단됐습니다"),
+        String(localized: "서버와의 연결이 끊어졌습니다"),
+        String(localized: "중계 서버가 잘못된 응답을 보냈습니다"),
     ]
 
     // MARK: - 수명
@@ -73,7 +73,7 @@ final class Terracotta {
         let dir = Paths.caches.appending(path: "terracotta")
         let opened: UInt16 = dir.path.withCString { terracotta_ios_start($0) }
         guard opened != 0 else {
-            failure = "테라코타를 시작하지 못했습니다."
+            failure = String(localized: "테라코타를 시작하지 못했습니다.")
             state = .stopped
             return
         }
@@ -174,7 +174,7 @@ final class Terracotta {
             let type = root["type"] as? Int ?? -1
             let message = exceptionMessages.indices.contains(type)
                 ? exceptionMessages[type]
-                : "알 수 없는 오류가 발생했습니다"
+                : String(localized: "알 수 없는 오류가 발생했습니다")
             return .failed(message)
         default:                 return .stopped
         }

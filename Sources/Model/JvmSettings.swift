@@ -590,6 +590,6 @@ extension JvmSettings {
     /// `com.apple.developer.kernel.extended-virtual-addressing` 권한 유무.
     /// 없으면 JVM 이 압축 클래스 공간을 잡지 못해 부팅 중에 죽는다.
     static let hasExtendedVirtualAddressing: Bool = {
-        FlameNativeDiagnostics().contains("확장 가상 주소 권한: 있음")
+        FlameNativeDiagnostics().contains(String(localized: "확장 가상 주소 권한: 있음"))
     }()
 }

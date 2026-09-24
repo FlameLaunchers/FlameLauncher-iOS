@@ -8,7 +8,7 @@ enum ModLoader: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .vanilla:  return "바닐라"
+        case .vanilla:  return String(localized: "바닐라")
         case .fabric:   return "Fabric"
         case .forge:    return "Forge"
         case .neoforge: return "NeoForge"
@@ -30,11 +30,11 @@ enum ModLoader: String, CaseIterable, Identifiable {
 
     var summary: String {
         switch self {
-        case .vanilla:  return "모드 없이 순정 그대로 실행"
-        case .fabric:   return "가볍고 빠른 모드 로더. 최신 버전 대응이 가장 빠름"
-        case .forge:    return "가장 오래된 모드 로더. 대형 모드팩 대부분이 여기"
-        case .neoforge: return "Forge 에서 갈라져 나온 최신 로더. 1.20.2+"
-        case .quilt:    return "Fabric 호환 포크. 실험적"
+        case .vanilla:  return String(localized: "모드 없이 순정 그대로 실행")
+        case .fabric:   return String(localized: "가볍고 빠른 모드 로더. 최신 버전 대응이 가장 빠름")
+        case .forge:    return String(localized: "가장 오래된 모드 로더. 대형 모드팩 대부분이 여기")
+        case .neoforge: return String(localized: "Forge 에서 갈라져 나온 최신 로더. 1.20.2+")
+        case .quilt:    return String(localized: "Fabric 호환 포크. 실험적")
         }
     }
 }

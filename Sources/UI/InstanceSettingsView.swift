@@ -57,7 +57,7 @@ struct InstanceSettingsView: View {
                 ProgressView().tint(FlameColor.primary)
             }
         }
-        .navigationTitle("인스턴스 설정")
+        .navigationTitle(String(localized: "인스턴스 설정"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(FlameColor.bgSurface, for: .navigationBar)
         .onAppear(perform: reload)
@@ -109,9 +109,9 @@ struct InstanceSettingsView: View {
     }
 
     private func rendererSection(_ meta: InstanceMeta) -> some View {
-        card(title: "렌더러", note: "이 인스턴스에만 적용됩니다. '전역 기본'이면 설정 화면의 값을 따릅니다.") {
+        card(title: String(localized: "렌더러"), note: String(localized: "이 인스턴스에만 적용됩니다. '전역 기본'이면 설정 화면의 값을 따릅니다.")) {
             VStack(spacing: 6) {
-                rendererRow(meta, nil, "전역 기본", "런처 기본 렌더러를 따릅니다")
+                rendererRow(meta, nil, String(localized: "전역 기본"), String(localized: "런처 기본 렌더러를 따릅니다"))
                 ForEach(Renderer.allCases) { r in
                     rendererRow(meta, r, "\(r.emoji) \(r.displayName)", r.summary)
                 }
@@ -147,10 +147,10 @@ struct InstanceSettingsView: View {
     /// 인스턴스별 해상도는 전역 설정을 그대로 쓴다 — 안드로이드도 같은 슬라이더를
     /// 두 곳에 뒀지만 값은 하나였다. 여기서 바꾸면 JVM 설정에도 그대로 반영된다.
     private var resolutionSection: some View {
-        card(title: "🔍 렌더 해상도",
-             note: "낮출수록 FPS가 오르고 화면은 약간 흐려집니다. HUD 크기는 배율에 "
-                 + "비례하지 않으니(마인크래프트가 가상 화면을 최소 320x240 으로 잡습니다) "
-                 + "HUD 수치가 가장 큰 배율을 고르세요.") {
+        card(title: String(localized: "🔍 렌더 해상도"),
+             note: String(localized: "낮출수록 FPS가 오르고 화면은 약간 흐려집니다. HUD 크기는 배율에 ")
+                 + String(localized: "비례하지 않으니(마인크래프트가 가상 화면을 최소 320x240 으로 잡습니다) ")
+                 + String(localized: "HUD 수치가 가장 큰 배율을 고르세요.")) {
             HStack(spacing: 10) {
                 Slider(
                     value: Binding(get: { Double(resScale) }, set: { resScale = Int($0) }),
@@ -209,7 +209,7 @@ struct InstanceSettingsView: View {
     }
 
     private func importSection(_ meta: InstanceMeta) -> some View {
-        card(title: "가져오기", note: "모드(.jar) · 리소스팩/맵(.zip) · 모드팩(.mrpack) 을 파일 앱에서 넣을 수 있어요.") {
+        card(title: String(localized: "가져오기"), note: String(localized: "모드(.jar) · 리소스팩/맵(.zip) · 모드팩(.mrpack) 을 파일 앱에서 넣을 수 있어요.")) {
             Button("📥 파일에서 가져오기") { showImporter = true }
                 .buttonStyle(FlameButtonStyle(height: 42))
                 .font(.system(size: 13, weight: .bold))

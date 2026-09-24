@@ -49,7 +49,7 @@ final class MicrosoftLoginController: UIViewController, WKNavigationDelegate {
         ])
 
         let cancel = UIButton(type: .system)
-        cancel.setTitle("취소", for: .normal)
+        cancel.setTitle(String(localized: "취소"), for: .normal)
         cancel.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
         cancel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(cancel)
@@ -91,7 +91,7 @@ final class MicrosoftLoginController: UIViewController, WKNavigationDelegate {
             return .failure(AuthStore.AuthError.cancelled)
         }
         return .failure(AuthStore.AuthError.authorize(
-            value("error_description") ?? value("error") ?? "인증 코드를 받지 못했습니다"))
+            value("error_description") ?? value("error") ?? String(localized: "인증 코드를 받지 못했습니다")))
     }
 
     // MARK: - WKNavigationDelegate

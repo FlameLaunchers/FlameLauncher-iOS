@@ -20,7 +20,7 @@ struct GameLauncher {
             switch self {
             case .noRuntime(let major):
                 let have = JavaInstallStore.installed().map { String($0.majorVersion) }
-                let list = have.isEmpty ? "없음" : have.joined(separator: ", ")
+                let list = have.isEmpty ? String(localized: "없음") : have.joined(separator: ", ")
                 return "이 버전에는 Java \(major) 이상이 필요합니다. (설치된 JRE: \(list))\n"
                      + "Documents/runtimes/ 아래에 iOS용 OpenJDK \(major) 를 넣어주세요."
             }
@@ -556,7 +556,7 @@ struct GameLauncher {
             env["JDK_JAVA_OPTIONS"] = ((env["JDK_JAVA_OPTIONS"] ?? "") + " -Dmax.bg.threads=2")
                 .trimmingCharacters(in: .whitespaces)
             print("[Flame] 모드 \(modCount)개\(isModpack ? " (모드팩)" : "")"
-                  + " · 아틀라스 상한 " + (atlasCap.map(String.init) ?? "없음"))
+                  + String(localized: " · 아틀라스 상한 ") + (atlasCap.map(String.init) ?? String(localized: "없음")))
         }
 
         return LaunchPlan(javaHome: java.home, argv: argv, env: env,

@@ -16,21 +16,21 @@ enum MainSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .instances: return "인스턴스 선택"
-        case .modpacks:  return "모드팩 설치"
-        case .settings:  return "옵션 · 렌더러"
-        case .keyboard:  return "키보드 편집"
-        case .notes:     return "업데이트 노트"
+        case .instances: return String(localized: "인스턴스 선택")
+        case .modpacks:  return String(localized: "모드팩 설치")
+        case .settings:  return String(localized: "옵션 · 렌더러")
+        case .keyboard:  return String(localized: "키보드 편집")
+        case .notes:     return String(localized: "업데이트 노트")
         }
     }
 
     var subtitle: String {
         switch self {
-        case .instances: return "버전을 고르고 실행"
+        case .instances: return String(localized: "버전을 고르고 실행")
         case .modpacks:  return "CurseForge · Modrinth"
-        case .settings:  return "메모리 · 해상도 · 렌더러"
-        case .keyboard:  return "화면 버튼 배치"
-        case .notes:     return "저장소 README"
+        case .settings:  return String(localized: "메모리 · 해상도 · 렌더러")
+        case .keyboard:  return String(localized: "화면 버튼 배치")
+        case .notes:     return String(localized: "저장소 README")
         }
     }
 
@@ -65,9 +65,9 @@ enum MainTab: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .installed: return "설치됨"
-        case .release:   return "정식"
-        case .all:       return "전체"
+        case .installed: return String(localized: "설치됨")
+        case .release:   return String(localized: "정식")
+        case .all:       return String(localized: "전체")
         }
     }
 
@@ -174,7 +174,7 @@ struct MainView: View {
         // 버전 전환 안내가 안 뜬다 — 실제로 그렇게 두 번 놓쳤다.
         .onChange(of: auth.error) { _, message in
             guard let message, !message.isEmpty else { return }
-            launcher.alert = LauncherModel.AlertMessage(title: "로그인 실패", message: message)
+            launcher.alert = LauncherModel.AlertMessage(title: String(localized: "로그인 실패"), message: message)
             auth.error = nil
         }
         .overlay {
@@ -840,8 +840,8 @@ private struct MobileBottomBar: View {
 
     private var title: String {
         tab == .installed
-            ? (selectedInstance?.name ?? "인스턴스를 선택하세요")
-            : (launcher.selectedVersion?.id ?? "버전을 선택하세요")
+            ? (selectedInstance?.name ?? String(localized: "인스턴스를 선택하세요"))
+            : (launcher.selectedVersion?.id ?? String(localized: "버전을 선택하세요"))
     }
 
     private var subtitle: String {

@@ -17,11 +17,11 @@ enum ContentType: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .modpack:      return "모드팩"
-        case .mod:          return "모드"
-        case .resourcepack: return "리소스팩"
-        case .shader:       return "셰이더"
-        case .world:        return "맵"
+        case .modpack:      return String(localized: "모드팩")
+        case .mod:          return String(localized: "모드")
+        case .resourcepack: return String(localized: "리소스팩")
+        case .shader:       return String(localized: "셰이더")
+        case .world:        return String(localized: "맵")
         }
     }
 

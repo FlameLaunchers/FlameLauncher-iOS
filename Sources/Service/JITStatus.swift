@@ -31,24 +31,24 @@ final class JITStatus {
 
         var title: String {
             switch self {
-            case .alreadyOn:   return "JIT 켜짐"
-            case .trollStore:  return "TrollStore 로 JIT 켜기"
-            case .altServer:   return "AltServer 로 JIT 켜기"
-            case .debugger:    return "JIT 를 켜는 중"
-            case .manual:      return "디버거 연결을 기다리는 중"
-            case .impossible:  return "이 서명으로는 JIT 를 켤 수 없습니다"
-            case .blocked:     return "이 기기에서는 JIT 를 쓸 수 없습니다"
+            case .alreadyOn:   return String(localized: "JIT 켜짐")
+            case .trollStore:  return String(localized: "TrollStore 로 JIT 켜기")
+            case .altServer:   return String(localized: "AltServer 로 JIT 켜기")
+            case .debugger:    return String(localized: "JIT 를 켜는 중")
+            case .manual:      return String(localized: "디버거 연결을 기다리는 중")
+            case .impossible:  return String(localized: "이 서명으로는 JIT 를 켤 수 없습니다")
+            case .blocked:     return String(localized: "이 기기에서는 JIT 를 쓸 수 없습니다")
             }
         }
 
         var detail: String {
             switch self {
             case .alreadyOn:
-                return "바로 실행할 수 있어요."
+                return String(localized: "바로 실행할 수 있어요.")
             case .trollStore:
-                return "TrollStore 로 전환됐다가 자동으로 돌아옵니다. 별도 조작은 필요 없어요."
+                return String(localized: "TrollStore 로 전환됐다가 자동으로 돌아옵니다. 별도 조작은 필요 없어요.")
             case .altServer:
-                return "컴퓨터의 AltServer 와 같은 Wi-Fi 에 있어야 합니다. 찾는 중…"
+                return String(localized: "컴퓨터의 AltServer 와 같은 Wi-Fi 에 있어야 합니다. 찾는 중…")
             case .debugger:
                 return """
                 StikDebug 로 자동 전환됐다가 곧 돌아옵니다. 별도 조작은 필요 없어요.
@@ -177,7 +177,7 @@ final class JITStatus {
         case .debugger:
             if !FlameNativeRequestDebuggerJIT() {
                 method = .manual
-                failureMessage = "JIT 도구를 호출하지 못했습니다. StikDebug 를 직접 열어주세요."
+                failureMessage = String(localized: "JIT 도구를 호출하지 못했습니다. StikDebug 를 직접 열어주세요.")
             }
         case .manual, .impossible, .blocked, .alreadyOn:
             break
@@ -243,7 +243,7 @@ final class JITStatus {
     private func requestAltServer() async {
         let message: String? = await withCheckedContinuation { continuation in
             FlameNativeRequestAltServerJIT { success, message in
-                continuation.resume(returning: success ? nil : (message ?? "AltServer 연결 실패"))
+                continuation.resume(returning: success ? nil : (message ?? String(localized: "AltServer 연결 실패")))
             }
         }
         failureMessage = message

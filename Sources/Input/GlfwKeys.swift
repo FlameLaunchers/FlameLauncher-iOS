@@ -197,39 +197,39 @@ enum GlfwKeyCatalog {
     static let all: [KeyInfo] = {
         var out: [KeyInfo] = []
         for (i, ch) in "ABCDEFGHIJKLMNOPQRSTUVWXYZ".enumerated() {
-            out.append(KeyInfo(code: GlfwKeys.a + i, label: String(ch), group: "문자"))
+            out.append(KeyInfo(code: GlfwKeys.a + i, label: String(ch), group: String(localized: "문자")))
         }
         for i in 0...9 {
-            out.append(KeyInfo(code: GlfwKeys.zero + i, label: String(i), group: "숫자"))
+            out.append(KeyInfo(code: GlfwKeys.zero + i, label: String(i), group: String(localized: "숫자")))
         }
         for i in 0..<12 {
-            out.append(KeyInfo(code: GlfwKeys.f1 + i, label: "F\(i + 1)", group: "기능키"))
+            out.append(KeyInfo(code: GlfwKeys.f1 + i, label: "F\(i + 1)", group: String(localized: "기능키")))
         }
         out += [
-            KeyInfo(code: GlfwKeys.space, label: "Space", group: "제어"),
-            KeyInfo(code: GlfwKeys.escape, label: "ESC", group: "제어"),
-            KeyInfo(code: GlfwKeys.enter, label: "Enter", group: "제어"),
-            KeyInfo(code: GlfwKeys.tab, label: "Tab", group: "제어"),
-            KeyInfo(code: GlfwKeys.backspace, label: "⌫", group: "제어"),
-            KeyInfo(code: GlfwKeys.leftShift, label: "Shift", group: "제어"),
-            KeyInfo(code: GlfwKeys.leftControl, label: "Ctrl", group: "제어"),
-            KeyInfo(code: GlfwKeys.leftAlt, label: "Alt", group: "제어"),
-            KeyInfo(code: GlfwKeys.up, label: "↑", group: "방향"),
-            KeyInfo(code: GlfwKeys.down, label: "↓", group: "방향"),
-            KeyInfo(code: GlfwKeys.left, label: "←", group: "방향"),
-            KeyInfo(code: GlfwKeys.right, label: "→", group: "방향"),
-            KeyInfo(code: 47, label: "/", group: "기호"),
-            KeyInfo(code: 44, label: ",", group: "기호"),
-            KeyInfo(code: 46, label: ".", group: "기호"),
-            KeyInfo(code: LauncherAction.softKeyboard, label: "⌨️ 키보드", group: "런처"),
-            KeyInfo(code: LauncherAction.combatMode, label: "⚔️ 전투", group: "런처"),
-            KeyInfo(code: LauncherAction.menu, label: "☰ 메뉴", group: "런처"),
+            KeyInfo(code: GlfwKeys.space, label: "Space", group: String(localized: "제어")),
+            KeyInfo(code: GlfwKeys.escape, label: "ESC", group: String(localized: "제어")),
+            KeyInfo(code: GlfwKeys.enter, label: "Enter", group: String(localized: "제어")),
+            KeyInfo(code: GlfwKeys.tab, label: "Tab", group: String(localized: "제어")),
+            KeyInfo(code: GlfwKeys.backspace, label: "⌫", group: String(localized: "제어")),
+            KeyInfo(code: GlfwKeys.leftShift, label: "Shift", group: String(localized: "제어")),
+            KeyInfo(code: GlfwKeys.leftControl, label: "Ctrl", group: String(localized: "제어")),
+            KeyInfo(code: GlfwKeys.leftAlt, label: "Alt", group: String(localized: "제어")),
+            KeyInfo(code: GlfwKeys.up, label: "↑", group: String(localized: "방향")),
+            KeyInfo(code: GlfwKeys.down, label: "↓", group: String(localized: "방향")),
+            KeyInfo(code: GlfwKeys.left, label: "←", group: String(localized: "방향")),
+            KeyInfo(code: GlfwKeys.right, label: "→", group: String(localized: "방향")),
+            KeyInfo(code: 47, label: "/", group: String(localized: "기호")),
+            KeyInfo(code: 44, label: ",", group: String(localized: "기호")),
+            KeyInfo(code: 46, label: ".", group: String(localized: "기호")),
+            KeyInfo(code: LauncherAction.softKeyboard, label: String(localized: "⌨️ 키보드"), group: String(localized: "런처")),
+            KeyInfo(code: LauncherAction.combatMode, label: String(localized: "⚔️ 전투"), group: String(localized: "런처")),
+            KeyInfo(code: LauncherAction.menu, label: String(localized: "☰ 메뉴"), group: String(localized: "런처")),
         ]
         return out
     }()
 
     static var grouped: [(String, [KeyInfo])] {
-        let order = ["런처", "제어", "문자", "숫자", "기능키", "방향", "기호"]
+        let order = [String(localized: "런처"), String(localized: "제어"), String(localized: "문자"), String(localized: "숫자"), String(localized: "기능키"), String(localized: "방향"), String(localized: "기호")]
         let dict = Dictionary(grouping: all, by: \.group)
         return order.compactMap { key in dict[key].map { (key, $0) } }
     }

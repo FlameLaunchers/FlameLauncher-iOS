@@ -14,8 +14,8 @@ struct ReleaseNotesView: View {
             if let html {
                 MarkdownWebView(html: ReleaseNotes.page(wrapping: html))
             } else if failed {
-                placeholder("📡", "업데이트 노트를 불러오지 못했어요",
-                            "네트워크를 확인하고 다시 시도해 주세요.") {
+                placeholder("📡", String(localized: "업데이트 노트를 불러오지 못했어요"),
+                            String(localized: "네트워크를 확인하고 다시 시도해 주세요.")) {
                     Button("다시 시도") { Task { await load() } }
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(FlameColor.primary)

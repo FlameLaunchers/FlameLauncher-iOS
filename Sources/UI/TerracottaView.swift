@@ -41,7 +41,7 @@ struct TerracottaView: View {
             .padding(Sizing.isTablet ? 20 : 14)
         }
         .background(FlameColor.bgDark)
-        .navigationTitle("온라인 LAN")
+        .navigationTitle(String(localized: "온라인 LAN"))
         .navigationBarTitleDisplayMode(.inline)
         .task { terracotta.start() }
         .onDisappear { terracotta.pausePolling() }
@@ -95,27 +95,27 @@ struct TerracottaView: View {
 
     private var statusTitle: String {
         switch terracotta.state {
-        case .stopped:          return "꺼져 있음"
-        case .waiting:          return "대기 중"
-        case .hostScanning:     return "LAN 월드를 찾는 중"
-        case .hostStarting:     return "방을 여는 중"
-        case .hostOK:           return "방이 열렸습니다"
-        case .guestConnecting:  return "방에 연결하는 중"
-        case .guestStarting:    return "접속을 준비하는 중"
-        case .guestOK:          return "연결됐습니다"
+        case .stopped:          return String(localized: "꺼져 있음")
+        case .waiting:          return String(localized: "대기 중")
+        case .hostScanning:     return String(localized: "LAN 월드를 찾는 중")
+        case .hostStarting:     return String(localized: "방을 여는 중")
+        case .hostOK:           return String(localized: "방이 열렸습니다")
+        case .guestConnecting:  return String(localized: "방에 연결하는 중")
+        case .guestStarting:    return String(localized: "접속을 준비하는 중")
+        case .guestOK:          return String(localized: "연결됐습니다")
         case .failed(let why):  return why
         }
     }
 
     private var statusDetail: String {
         switch terracotta.state {
-        case .stopped:      return "잠시 후 자동으로 시작합니다"
-        case .waiting:      return "방을 열거나 방 코드로 참가하세요"
-        case .hostScanning: return "게임에서 월드를 열고 'LAN 에 공개'를 눌러주세요"
-        case .hostOK:       return "친구에게 아래 코드를 알려주세요"
-        case .guestOK:      return "게임의 서버 목록에서 아래 주소로 접속하세요"
-        case .failed:       return "다시 시도하거나 방 코드를 확인해주세요"
-        default:            return "잠시만 기다려주세요"
+        case .stopped:      return String(localized: "잠시 후 자동으로 시작합니다")
+        case .waiting:      return String(localized: "방을 열거나 방 코드로 참가하세요")
+        case .hostScanning: return String(localized: "게임에서 월드를 열고 'LAN 에 공개'를 눌러주세요")
+        case .hostOK:       return String(localized: "친구에게 아래 코드를 알려주세요")
+        case .guestOK:      return String(localized: "게임의 서버 목록에서 아래 주소로 접속하세요")
+        case .failed:       return String(localized: "다시 시도하거나 방 코드를 확인해주세요")
+        default:            return String(localized: "잠시만 기다려주세요")
         }
     }
 
@@ -201,7 +201,7 @@ struct TerracottaView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("방 참가").font(.system(size: 13, weight: .bold))
                     .foregroundStyle(FlameColor.textMain)
-                TextField("방 코드", text: $roomInput)
+                TextField(String(localized: "방 코드"), text: $roomInput)
                     .focused($roomFocused)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()

@@ -26,7 +26,7 @@ enum Zip {
 
         var errorDescription: String? {
             switch self {
-            case .notAZip: return "ZIP 파일이 아닙니다 (중앙 디렉터리를 찾지 못함)"
+            case .notAZip: return String(localized: "ZIP 파일이 아닙니다 (중앙 디렉터리를 찾지 못함)")
             case .unsupportedMethod(let m): return "지원하지 않는 압축 방식: \(m)"
             case .corrupt(let m): return "손상된 ZIP: \(m)"
             }

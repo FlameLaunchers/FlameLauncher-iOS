@@ -126,13 +126,13 @@ final class NativeJavaRuntime: JavaRuntime {
     static func launchFailureReason(_ code: Int32) -> String? {
         switch code {
         case Int32(FLAME_LAUNCH_ERR_SIMULATOR):
-            return "시뮬레이터에서는 게임을 실행할 수 없습니다 — 기기용 바이너리라 열 수 없어요."
+            return String(localized: "시뮬레이터에서는 게임을 실행할 수 없습니다 — 기기용 바이너리라 열 수 없어요.")
         case Int32(FLAME_LAUNCH_ERR_NO_JLI):
-            return "JRE 에 libjli.dylib 이 없습니다. runtimes 폴더의 JRE 가 온전한지 확인해 주세요."
+            return String(localized: "JRE 에 libjli.dylib 이 없습니다. runtimes 폴더의 JRE 가 온전한지 확인해 주세요.")
         case Int32(FLAME_LAUNCH_ERR_DLOPEN):
-            return "JRE 를 열지 못했습니다. 기기용(arm64) iOS 빌드가 맞는지 확인해 주세요."
+            return String(localized: "JRE 를 열지 못했습니다. 기기용(arm64) iOS 빌드가 맞는지 확인해 주세요.")
         case Int32(FLAME_LAUNCH_ERR_NO_SYMBOL):
-            return "JRE 에서 JLI_Launch 를 찾지 못했습니다. 손상된 JRE 로 보입니다."
+            return String(localized: "JRE 에서 JLI_Launch 를 찾지 못했습니다. 손상된 JRE 로 보입니다.")
         case Int32(FLAME_LAUNCH_ERR_NO_DEBUGGER):
             return """
             디버거가 붙어 있지 않습니다.
@@ -223,7 +223,7 @@ final class NativeJavaRuntime: JavaRuntime {
 /// 입력은 전부 받아서 기록만 한다 — 그래서 JRE 없이도 화면 버튼·조이스틱·패드·키보드
 /// 매핑을 실제로 눌러보며 검증할 수 있다. 부팅만 거부한다.
 final class StubJavaRuntime: JavaRuntime {
-    private(set) var lastEvent = "입력 대기 중"
+    private(set) var lastEvent = String(localized: "입력 대기 중")
     private(set) var eventCount = 0
 
     var isAvailable: Bool { false }

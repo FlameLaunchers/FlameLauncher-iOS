@@ -102,7 +102,7 @@ final class AuthStore: NSObject {
         } catch {
             // ⚠️ 네트워크 오류로 로그아웃시키면 안 된다 — 비행기/지하철에서 앱을 켰다는
             //    이유만으로 세션이 날아가 버린다. 세션은 남기고 다음 시도를 기다린다.
-            self.error = "세션 갱신에 실패했습니다(네트워크). 오프라인 상태로 계속합니다."
+            self.error = String(localized: "세션 갱신에 실패했습니다(네트워크). 오프라인 상태로 계속합니다.")
         }
     }
 
@@ -115,7 +115,7 @@ final class AuthStore: NSObject {
 
         do {
             let code = try await authorizationCode()
-            progress = "Microsoft 토큰 요청 중…"
+            progress = String(localized: "Microsoft 토큰 요청 중…")
             let msToken = try await msToken(grant: ["code": code, "grant_type": "authorization_code"])
             session = try await completeChain(msToken)
             Self.store(session)
@@ -195,16 +195,16 @@ final class AuthStore: NSObject {
 
     /// XBL → XSTS → Minecraft → 프로필. 안드로이드와 같은 5단계.
     private func completeChain(_ msToken: MsToken) async throws -> AuthSession {
-        progress = "Xbox Live 인증 중…"
+        progress = String(localized: "Xbox Live 인증 중…")
         let (xblToken, uhs) = try await xblToken(msToken.access_token)
 
-        progress = "XSTS 토큰 요청 중…"
+        progress = String(localized: "XSTS 토큰 요청 중…")
         let xsts = try await xstsToken(xblToken)
 
-        progress = "마인크래프트 토큰 요청 중…"
+        progress = String(localized: "마인크래프트 토큰 요청 중…")
         let mc = try await mcToken(uhs: uhs, xsts: xsts)
 
-        progress = "프로필 확인 중…"
+        progress = String(localized: "프로필 확인 중…")
         let profile = try await mcProfile(mc.access_token)
 
         guard let name = profile.name, let id = profile.id else {
@@ -275,13 +275,13 @@ final class AuthStore: NSObject {
         let code = (error.json?["XErr"] as? NSNumber)?.int64Value ?? 0
         switch code {
         case 2_148_916_233:
-            return "이 Microsoft 계정에 Xbox 프로필이 없습니다.\nxbox.com 에서 프로필을 먼저 만들어 주세요."
+            return String(localized: "이 Microsoft 계정에 Xbox 프로필이 없습니다.\nxbox.com 에서 프로필을 먼저 만들어 주세요.")
         case 2_148_916_235:
-            return "Xbox Live 를 사용할 수 없는 국가/지역의 계정입니다."
+            return String(localized: "Xbox Live 를 사용할 수 없는 국가/지역의 계정입니다.")
         case 2_148_916_236, 2_148_916_237:
-            return "성인 인증이 필요한 계정입니다. xbox.com 에서 인증을 마쳐 주세요."
+            return String(localized: "성인 인증이 필요한 계정입니다. xbox.com 에서 인증을 마쳐 주세요.")
         case 2_148_916_238:
-            return "미성년자 계정입니다. 가족 구성원으로 추가되어야 로그인할 수 있습니다."
+            return String(localized: "미성년자 계정입니다. 가족 구성원으로 추가되어야 로그인할 수 있습니다.")
         default:
             return "Xbox Live 인증에 실패했습니다 (XErr \(code == 0 ? "알 수 없음" : String(code)))."
         }
@@ -331,15 +331,15 @@ final class AuthStore: NSObject {
 
         var errorDescription: String? {
             switch self {
-            case .cancelled: return "로그인을 취소했습니다."
-            case .cannotOpenBrowser: return "로그인 창을 열 수 없습니다."
-            case .noCode: return "인증 코드를 받지 못했습니다."
-            case .noUhs: return "Xbox Live 사용자 해시를 받지 못했습니다."
+            case .cancelled: return String(localized: "로그인을 취소했습니다.")
+            case .cannotOpenBrowser: return String(localized: "로그인 창을 열 수 없습니다.")
+            case .noCode: return String(localized: "인증 코드를 받지 못했습니다.")
+            case .noUhs: return String(localized: "Xbox Live 사용자 해시를 받지 못했습니다.")
             case .authorize(let m): return "Microsoft 로그인 실패: \(m)"
             case .xsts(let m): return m
             case .noProfile(let m):
-                return m ?? "이 계정에는 마인크래프트 자바 에디션 프로필이 없습니다.\n"
-                          + "자바 에디션을 구매한 계정인지 확인해 주세요."
+                return m ?? String(localized: "이 계정에는 마인크래프트 자바 에디션 프로필이 없습니다.\n")
+                          + String(localized: "자바 에디션을 구매한 계정인지 확인해 주세요.")
             }
         }
     }

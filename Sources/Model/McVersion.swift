@@ -103,12 +103,12 @@ struct DownloadProgress: Equatable {
     /// 안드로이드 SidePlayPanel/MobileBottomBar 의 문구를 그대로 옮긴 것.
     var label: String {
         switch phase {
-        case .fetchingManifest:     return "버전 정보 가져오는 중..."
-        case .downloadingClient:    return "클라이언트 내려받는 중..."
+        case .fetchingManifest:     return String(localized: "버전 정보 가져오는 중...")
+        case .downloadingClient:    return String(localized: "클라이언트 내려받는 중...")
         case .downloadingLibraries: return "라이브러리 \(current)/\(total)"
         case .downloadingAssets:    return "에셋 \(current)/\(total)"
         case .installingLoader:     return "모드 로더 설치 중... \(fileName)"
-        case .error:                return "❌ " + (error ?? "오류")
+        case .error:                return "❌ " + (error ?? String(localized: "오류"))
         default:                    return ""
         }
     }

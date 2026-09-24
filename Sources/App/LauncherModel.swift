@@ -86,7 +86,7 @@ final class LauncherModel {
         // 사용자는 아무 설명 없이 앱이 사라지는 것만 겪는다.
         guard FlameNativeRequestDebuggerJITForRelaunch() else {
             alert = AlertMessage(
-                title: "앱을 다시 열어주세요",
+                title: String(localized: "앱을 다시 열어주세요"),
                 message: "\(meta.name) 로 준비해 뒀습니다. 앱을 완전히 종료했다 다시 열면 바로 이어집니다."
             )
             return
@@ -140,7 +140,7 @@ final class LauncherModel {
         isLoadingVersions = true
         versions = await VersionService.versions()
         versionLoadError = versions.isEmpty
-            ? (VersionService.lastError?.localizedDescription ?? "버전 목록을 가져오지 못했습니다")
+            ? (VersionService.lastError?.localizedDescription ?? String(localized: "버전 목록을 가져오지 못했습니다"))
             : nil
         isLoadingVersions = false
         if selectedVersion == nil {
@@ -201,7 +201,7 @@ final class LauncherModel {
             launch(meta)
         } catch {
             progress = DownloadProgress(phase: .error, error: error.localizedDescription)
-            alert = AlertMessage(title: "설치 실패", message: error.localizedDescription)
+            alert = AlertMessage(title: String(localized: "설치 실패"), message: error.localizedDescription)
         }
     }
 
@@ -213,12 +213,12 @@ final class LauncherModel {
             let name = InstanceStore.shared.instances.first { $0.id == booted }?.name ?? booted
             print("[Flame] 버전 전환 필요: \(name) -> \(meta.name)")
             let body = "이번 실행에서는 \(name) 을(를) 이미 띄웠습니다. "
-                + "자바 가상머신은 앱 실행당 한 번만 뜰 수 있어서 앱이 새로 떠야 합니다.\n\n"
+                + String(localized: "자바 가상머신은 앱 실행당 한 번만 뜰 수 있어서 앱이 새로 떠야 합니다.\n\n")
                 + "전환을 누르면 JIT 도구를 거쳐 알아서 다시 뜨고, \(meta.name) 가 바로 실행됩니다."
             alert = AlertMessage(
                 title: "\(meta.name) 로 전환할까요?",
                 message: body,
-                confirmTitle: "전환",
+                confirmTitle: String(localized: "전환"),
                 confirm: { [weak self] in self?.switchTo(meta) },
                 cancellable: true
             )

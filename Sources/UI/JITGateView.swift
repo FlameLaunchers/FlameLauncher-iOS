@@ -35,7 +35,7 @@ struct JITGateView: View {
                 .foregroundStyle(FlameColor.textMain)
             // 왜 필요한지 한 줄로 — 이게 없으면 사용자는 "왜 이 화면이 뜨지"만 남는다.
             Text("iOS 는 앱이 실행 중에 코드를 만들지 못하게 막습니다. 자바는 그 방식으로 도는 언어라, "
-                 + "이 제한을 풀지 않으면 마인크래프트가 뜨지 않거나 5 FPS 도 안 나옵니다.")
+                 + String(localized: "이 제한을 풀지 않으면 마인크래프트가 뜨지 않거나 5 FPS 도 안 나옵니다."))
                 .font(.system(size: Sizing.isCompact ? 11 : 13))
                 .foregroundStyle(FlameColor.textSub)
         }

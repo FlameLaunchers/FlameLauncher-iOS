@@ -35,7 +35,7 @@ struct SettingsView: View {
                 .padding(Sizing.isTablet ? 20 : 12)
             }
         }
-        .navigationTitle("JVM 설정")
+        .navigationTitle(String(localized: "JVM 설정"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(FlameColor.bgSurface, for: .navigationBar)
         .toolbar {
@@ -103,11 +103,11 @@ struct SettingsView: View {
 
     private var screenSection: some View {
         Section("화면 설정") {
-            toggleRow("🖥", "전체 화면", "시스템 바를 숨기고 화면을 꽉 채웁니다",
+            toggleRow("🖥", String(localized: "전체 화면"), String(localized: "시스템 바를 숨기고 화면을 꽉 채웁니다"),
                       isOn: $settings.fullscreen)
 
             sliderRow(
-                "📐", "렌더 해상도",
+                "📐", String(localized: "렌더 해상도"),
                 value: Binding(
                     get: { Double(settings.resolutionScalePercent) },
                     set: { settings.resolutionScalePercent = Int($0) }
@@ -115,10 +115,10 @@ struct SettingsView: View {
                 range: Double(JvmSettings.resScaleMin)...Double(JvmSettings.resScaleMax),
                 step: 5,
                 valueLabel: "\(settings.resolutionScalePercent)% · HUD \(hudLabel)",
-                note: "낮출수록 프레임버퍼가 작아져 FPS가 오르고 화면은 약간 흐려집니다.\n"
-                    + "HUD 크기는 배율에 비례하지 않습니다 — 마인크래프트가 가상 화면을 "
-                    + "최소 320x240 으로 잡아서, 배율을 올렸는데 인벤토리가 작아지는 구간이 "
-                    + "있습니다. 위 HUD 배수가 클수록 인벤토리·핫바가 큽니다."
+                note: String(localized: "낮출수록 프레임버퍼가 작아져 FPS가 오르고 화면은 약간 흐려집니다.\n")
+                    + String(localized: "HUD 크기는 배율에 비례하지 않습니다 — 마인크래프트가 가상 화면을 ")
+                    + String(localized: "최소 320x240 으로 잡아서, 배율을 올렸는데 인벤토리가 작아지는 구간이 ")
+                    + String(localized: "있습니다. 위 HUD 배수가 클수록 인벤토리·핫바가 큽니다.")
             )
 
             hudRow
@@ -156,7 +156,7 @@ struct SettingsView: View {
             }
 
             HStack(spacing: 6) {
-                hudChoice(0, label: "자동", enabled: true)
+                hudChoice(0, label: String(localized: "자동"), enabled: true)
                 ForEach(2...4, id: \.self) { value in
                     hudChoice(value, label: "\(value)배", enabled: value <= maxScale)
                 }
@@ -194,26 +194,26 @@ struct SettingsView: View {
            let need = JvmSettings.minResolutionPercent(forHudScale: maxScale + 1,
                                                        fullHeightPx: fullH),
            need > settings.resolutionScalePercent {
-            return "인벤토리·핫바가 커지고 터치 영역도 같이 커집니다. "
+            return String(localized: "인벤토리·핫바가 커지고 터치 영역도 같이 커집니다. ")
                  + "\(maxScale + 1)배는 대형 상자가 잘려서 잠겨 있습니다 — "
                  + "렌더 해상도를 \(need)% 이상으로 올리면 열립니다."
         }
         return maxScale > autoScale
-            ? "인벤토리·핫바가 커지고 터치 영역도 같이 커집니다. 잘리는 단계는 잠겨 있습니다."
-            : "지금 해상도에서는 자동값이 이미 최대입니다. 해상도를 올리면 더 큰 단계가 열립니다."
+            ? String(localized: "인벤토리·핫바가 커지고 터치 영역도 같이 커집니다. 잘리는 단계는 잠겨 있습니다.")
+            : String(localized: "지금 해상도에서는 자동값이 이미 최대입니다. 해상도를 올리면 더 큰 단계가 열립니다.")
     }
     private var memorySection: some View {
         Section("메모리", note: "기기 전체 \(JvmSettingsStore.totalRamMb)MB · 권장 상한 \(ceiling)MB") {
             sliderRow(
-                "🧠", "최대 힙 (-Xmx)",
+                "🧠", String(localized: "최대 힙 (-Xmx)"),
                 value: Binding(get: { Double(settings.maxHeapMb) },
                                set: { settings.maxHeapMb = Int($0) }),
                 range: 512...Double(ceiling), step: 128,
                 valueLabel: "\(settings.maxHeapMb)MB",
                 // iOS 는 앱당 메모리 상한이 물리 메모리보다 훨씬 낮고 넘으면 경고 없이 죽는다.
-                note: "너무 높이면 iOS가 앱을 강제 종료합니다. 모드팩이 아니면 2048MB 정도면 충분해요."
+                note: String(localized: "너무 높이면 iOS가 앱을 강제 종료합니다. 모드팩이 아니면 2048MB 정도면 충분해요.")
             )
-            toggleRow("♻️", "G1 GC 사용", "일시 정지가 짧은 GC. 대부분 켜두는 게 좋습니다",
+            toggleRow("♻️", String(localized: "G1 GC 사용"), String(localized: "일시 정지가 짧은 GC. 대부분 켜두는 게 좋습니다"),
                       isOn: $settings.useG1GC)
         }
     }
@@ -221,23 +221,23 @@ struct SettingsView: View {
     private var gameplaySection: some View {
         Section("게임플레이") {
             sliderRow(
-                "🌍", "렌더 거리",
+                "🌍", String(localized: "렌더 거리"),
                 value: Binding(get: { Double(settings.renderDistance) },
                                set: { settings.renderDistance = Int($0) }),
                 range: 2...16, step: 1,
                 valueLabel: "\(settings.renderDistance) 청크",
-                note: "첫 실행에만 적용됩니다. 이후엔 게임 안에서 바꾼 값이 유지돼요."
+                note: String(localized: "첫 실행에만 적용됩니다. 이후엔 게임 안에서 바꾼 값이 유지돼요.")
             )
             sliderRow(
-                "🖱", "마우스 감도",
+                "🖱", String(localized: "마우스 감도"),
                 value: $settings.mouseSensitivity,
                 range: 0.3...4, step: 0.1,
                 valueLabel: String(format: "%.1f×", settings.mouseSensitivity),
                 note: nil
             )
-            toggleRow("🚀", "FPS 제한 해제", "260 FPS 상한 + VSync 끔",
+            toggleRow("🚀", String(localized: "FPS 제한 해제"), String(localized: "260 FPS 상한 + VSync 끔"),
                       isOn: $settings.unlockFps)
-            toggleRow("☁️", "구름 끄기", "구름 렌더를 꺼서 프레임을 확보합니다",
+            toggleRow("☁️", String(localized: "구름 끄기"), String(localized: "구름 렌더를 꺼서 프레임을 확보합니다"),
                       isOn: $settings.disableClouds)
         }
     }

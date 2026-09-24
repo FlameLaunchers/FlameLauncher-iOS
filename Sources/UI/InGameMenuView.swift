@@ -43,7 +43,7 @@ struct InGameMenuView: View {
                     .padding(Sizing.isCompact ? 12 : 20)
                 }
             }
-            .navigationTitle("인게임 설정")
+            .navigationTitle(String(localized: "인게임 설정"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(FlameColor.bgSurface, for: .navigationBar)
             .toolbar {
@@ -92,10 +92,10 @@ struct InGameMenuView: View {
     private var multiplayerSubtitle: String {
         switch terracotta.state {
         case .hostOK(let room):  return "방 열림 · \(room)"
-        case .guestOK:           return "연결됨"
+        case .guestOK:           return String(localized: "연결됨")
         case .failed(let why):   return why
-        case .stopped:           return "월드를 LAN 에 공개한 뒤 방을 여세요"
-        default:                 return "방 코드로 친구와 함께 하기"
+        case .stopped:           return String(localized: "월드를 LAN 에 공개한 뒤 방을 여세요")
+        default:                 return String(localized: "방 코드로 친구와 함께 하기")
         }
     }
 
