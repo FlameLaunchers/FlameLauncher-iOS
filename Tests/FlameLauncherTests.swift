@@ -1112,4 +1112,42 @@ final class FlameLauncherTests: XCTestCase {
         XCTAssertNoThrow(try JSONDecoder().decode(InstanceMeta.self, from: Data(android.utf8)))
     }
 
+
+    // MARK: - 병렬 다운로드
+
+    /// 에셋·모드 파일은 수천 개를 겹쳐서 받는다. 하나라도 빠뜨리면 텍스처가 조용히 비고,
+    /// 한도를 넘으면 연결이 몰려서 오히려 느려진다 — 둘 다 여기서 걸린다.
+    func testParallelForEachRunsEveryItemWithinLimit() async {
+        let tracker = ConcurrencyTracker()
+        await Parallel.forEach(Array(0..<1000), limit: 16) { i in
+            await tracker.start()
+            try? await Task.sleep(nanoseconds: UInt64.random(in: 50_000...300_000))
+            await tracker.finish(i)
+        }
+        let seen = await tracker.seen
+        let peak = await tracker.peak
+        XCTAssertEqual(Set(seen), Set(0..<1000), "빠뜨리거나 중복 처리한 항목이 있다")
+        XCTAssertEqual(seen.count, 1000)
+        XCTAssertLessThanOrEqual(peak, 16, "동시 실행이 한도를 넘었다")
+        XCTAssertGreaterThan(peak, 1, "병렬로 돌지 않았다")
+
+        // 빈 배열은 아무것도 돌리지 않고, 항목보다 한도가 커도 전부 돈다.
+        await Parallel.forEach([Int](), limit: 8) { _ in XCTFail("빈 배열인데 실행됐다") }
+        let few = ConcurrencyTracker()
+        await Parallel.forEach([1, 2, 3], limit: 16) { i in
+            await few.start(); await few.finish(i)
+        }
+        let fewSeen = await few.seen
+        XCTAssertEqual(fewSeen.count, 3)
+    }
+
+}
+
+/// 위 테스트 전용 — 몇 개가 동시에 돌았는지, 무엇이 돌았는지 센다.
+private actor ConcurrencyTracker {
+    private(set) var seen: [Int] = []
+    private var running = 0
+    private(set) var peak = 0
+    func start() { running += 1; peak = max(peak, running) }
+    func finish(_ i: Int) { running -= 1; seen.append(i) }
 }

@@ -15,8 +15,9 @@ struct MinecraftDownloader {
     let onProgress: @Sendable (DownloadProgress) -> Void
 
     /// 에셋은 파일이 수천 개라 순차로 받으면 몇 분씩 걸린다.
-    /// 안드로이드는 순차였지만, 여기서는 8개씩 병렬로 받는다.
-    private let assetConcurrency = 8
+    /// URLSession 의 호스트당 연결 수(16)에 맞춰 같이 올린다 — 더 늘려도 세션이 큐에 쌓아둘 뿐이다.
+    private let assetConcurrency = 16
+    private let libraryConcurrency = 8
 
     func prepare() async throws -> MCPrepareResult {
         onProgress(DownloadProgress(phase: .fetchingManifest))
@@ -36,8 +37,9 @@ struct MinecraftDownloader {
         let clientJar = instanceDir.appending(path: "versions/\(manifest.id)/\(manifest.id).jar")
         try await HTTP.download(manifest.downloads.client.url, to: clientJar)
 
-        // 2) 에셋 인덱스
-        let assetIndexFile = instanceDir.appending(path: "assets/indexes/\(manifest.assetIndex.id).json")
+        // 2) 에셋 인덱스 (에셋은 인스턴스끼리 공유한다 — Paths.assets 설명 참고)
+        let assetsDir = Paths.assets(for: instanceDir)
+        let assetIndexFile = assetsDir.appending(path: "indexes/\(manifest.assetIndex.id).json")
         try await HTTP.download(manifest.assetIndex.url, to: assetIndexFile)
 
         // 3) 라이브러리
@@ -46,21 +48,25 @@ struct MinecraftDownloader {
             guard let artifact = lib.downloads?.artifact else { return nil }
             return (Maven.path(lib.name), artifact)
         }
-        for (index, (path, artifact)) in artifacts.enumerated() {
+        let total = artifacts.count
+        let done = Counter()
+        let onProgress = self.onProgress
+        await Parallel.forEach(artifacts, limit: libraryConcurrency) { path, artifact in
             let dest = librariesDir.appending(path: path)
-            onProgress(DownloadProgress(
-                phase: .downloadingLibraries,
-                current: index + 1, total: artifacts.count,
-                fileName: dest.lastPathComponent
-            ))
             // 라이브러리 하나가 404 여도 게임은 대개 뜬다(플랫폼별 네이티브 등).
             // 안드로이드도 실패를 로그만 남기고 넘어간다 — 여기서 던지면 설치가 통째로 실패한다.
             _ = try? await HTTP.download(artifact.url, to: dest)
+            let n = await done.increment()
+            onProgress(DownloadProgress(
+                phase: .downloadingLibraries,
+                current: n, total: total,
+                fileName: dest.lastPathComponent
+            ))
         }
 
         // 4) 에셋 오브젝트
         try await downloadAssets(indexFile: assetIndexFile,
-                                 objectsDir: instanceDir.appending(path: "assets/objects"))
+                                 objectsDir: assetsDir.appending(path: "objects"))
 
         return MCPrepareResult(
             assetIndexId: manifest.assetIndex.id,
@@ -82,43 +88,24 @@ struct MinecraftDownloader {
         let hashes = index.objects.values.map(\.hash)
         let total = hashes.count
         let done = Counter()
+        let onProgress = self.onProgress
 
-        await withTaskGroup(of: Void.self) { group in
-            var iterator = hashes.makeIterator()
-            var inFlight = 0
-
-            func addNext() {
-                guard let hash = iterator.next() else { return }
-                inFlight += 1
-                group.addTask {
-                    let prefix = String(hash.prefix(2))
-                    let dest = objectsDir.appending(path: "\(prefix)/\(hash)")
-                    _ = try? await HTTP.download(
-                        "https://resources.download.minecraft.net/\(prefix)/\(hash)", to: dest
-                    )
-                    let n = await done.increment()
-                    // 파일마다 UI 를 때리면 스크롤이 끊긴다 — 32개마다 한 번만 보고.
-                    if n % 32 == 0 || n == total {
-                        onProgress(DownloadProgress(
-                            phase: .downloadingAssets, current: n, total: total,
-                            fileName: String(hash.prefix(12)) + "..."
-                        ))
-                    }
-                }
-            }
-
-            for _ in 0..<assetConcurrency { addNext() }
-            while await group.next() != nil {
-                inFlight -= 1
-                addNext()
+        await Parallel.forEach(hashes, limit: assetConcurrency) { hash in
+            let prefix = String(hash.prefix(2))
+            let dest = objectsDir.appending(path: "\(prefix)/\(hash)")
+            _ = try? await HTTP.download(
+                "https://resources.download.minecraft.net/\(prefix)/\(hash)", to: dest
+            )
+            let n = await done.increment()
+            // 파일마다 UI 를 때리면 스크롤이 끊긴다 — 32개마다 한 번만 보고.
+            if n % 32 == 0 || n == total {
+                onProgress(DownloadProgress(
+                    phase: .downloadingAssets, current: n, total: total,
+                    fileName: String(hash.prefix(12)) + "..."
+                ))
             }
         }
     }
-}
-
-private actor Counter {
-    private var value = 0
-    func increment() -> Int { value += 1; return value }
 }
 
 /// "group:artifact:version[:classifier]" → 메이븐 저장소 상대 경로.

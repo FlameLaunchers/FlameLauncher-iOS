@@ -7,7 +7,9 @@ enum HTTP {
         let c = URLSessionConfiguration.default
         c.timeoutIntervalForRequest = 30
         c.timeoutIntervalForResource = 60 * 60      // 큰 모드팩 다운로드용
-        c.httpMaximumConnectionsPerHost = 8
+        // 에셋은 1~50KB 짜리가 수천 개다 — 대역폭이 아니라 요청 왕복 횟수가 병목이라
+        // 동시 연결 수를 올리는 게 그대로 체감 속도가 된다.
+        c.httpMaximumConnectionsPerHost = 16
         return URLSession(configuration: c)
     }()
 

@@ -165,17 +165,16 @@ struct ContentInstaller {
             }
         }
 
-        // 3) 인덱스가 지정한 외부 파일들
-        let files = (index["files"] as? [[String: Any]]) ?? []
-        for (i, f) in files.enumerated() {
+        // 3) 인덱스가 지정한 외부 파일들 — 모드 200개짜리 팩을 하나씩 받으면 설치가 몇 분씩 걸린다.
+        let files = ((index["files"] as? [[String: Any]]) ?? []).compactMap {
+            f -> (path: String, downloads: [String])? in
             guard let path = f["path"] as? String,
                   let downloads = f["downloads"] as? [String], !downloads.isEmpty,
                   !path.contains("..")
-            else { continue }
-            onProgress(DownloadProgress(phase: .installingLoader, current: i + 1,
-                                        total: files.count, fileName: path))
-            await HTTP.downloadFirst(downloads, to: meta.dir.appending(path: path))
+            else { return nil }
+            return (path, downloads)
         }
+        await downloadAll(files.map { ($0.downloads, meta.dir.appending(path: $0.path), $0.path) })
 
         // 4) overrides/ (설정 파일·리소스팩 등 팩 제작자가 직접 넣은 것)
         _ = try? Zip.unzip(archive, to: meta.dir, strip: "overrides/")
@@ -262,22 +261,19 @@ struct ContentInstaller {
         let infos = await CurseForgeAPI.fileInfos(fileIds)
         let classes = await CurseForgeAPI.classIds(projectIds)
 
-        for (i, e) in entries.enumerated() {
+        let targets = entries.compactMap { e -> ([String], URL, String)? in
             guard let fileId = e["fileID"] as? Int, let info = infos[fileId],
-                  let link = info.url else { continue }
-            let projectId = e["projectID"] as? Int ?? 0
+                  let link = info.url else { return nil }
             // 12 = 리소스팩, 6552 = 셰이더팩. 나머지(6 = 모드 포함)는 mods/ 가 안전한 기본값이다.
             let folder: String
-            switch classes[projectId] {
+            switch classes[e["projectID"] as? Int ?? 0] {
             case 12:   folder = "resourcepacks"
             case 6552: folder = "shaderpacks"
             default:   folder = "mods"
             }
-            onProgress(DownloadProgress(phase: .installingLoader, current: i + 1,
-                                        total: entries.count, fileName: info.fileName))
-            let dest = meta.dir.appending(path: "\(folder)/\(info.fileName)")
-            _ = try? await HTTP.download(link, to: dest)
+            return ([link], meta.dir.appending(path: "\(folder)/\(info.fileName)"), info.fileName)
         }
+        await downloadAll(targets)
 
         // 4) overrides (팩 제작자가 직접 넣은 설정·리소스)
         let overrides = (manifest["overrides"] as? String) ?? "overrides"
@@ -296,6 +292,19 @@ struct ContentInstaller {
         InstanceStore.shared.save(meta)
         onProgress(DownloadProgress(phase: .done))
         return meta
+    }
+
+    /// 모드팩 파일들을 12개씩 겹쳐 받는다. 후보 URL 목록 · 저장 위치 · 진행 표시용 이름.
+    private func downloadAll(_ targets: [([String], URL, String)]) async {
+        let total = targets.count
+        let done = Counter()
+        let onProgress = self.onProgress
+        await Parallel.forEach(targets, limit: 12) { urls, dest, name in
+            await HTTP.downloadFirst(urls, to: dest)
+            let n = await done.increment()
+            onProgress(DownloadProgress(phase: .installingLoader, current: n,
+                                        total: total, fileName: name))
+        }
     }
 
     /// "fabric-0.16.9" → (.fabric, "0.16.9")

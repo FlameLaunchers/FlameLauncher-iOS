@@ -14,6 +14,19 @@ enum Paths {
     static func instance(_ id: String) -> URL { instances.appending(path: id) }
     static var runtime: URL { files.appending(path: "runtime") }
 
+    /// 인스턴스가 함께 쓰는 에셋 폴더. 같은 MC 버전을 두 번 설치해도 오브젝트 수천 개를
+    /// 다시 받지 않는다(1.21 기준 인스턴스당 수백 MB).
+    ///
+    /// 단, **이미 인스턴스 안에 받아둔 에셋이 있으면 그걸 그대로 쓴다** — 예전 버전으로 설치한
+    /// 인스턴스는 인덱스와 오브젝트가 인스턴스 폴더에 있고, 여기서 공용으로 갈아타면
+    /// 인덱스는 인스턴스에 · 오브젝트는 공용에 나뉘어 텍스처가 통째로 빈다.
+    static func assets(for instanceDir: URL) -> URL {
+        let local = instanceDir.appending(path: "assets")
+        let indexes = local.appending(path: "indexes")
+        let hasLocal = (try? FileManager.default.contentsOfDirectory(atPath: indexes.path))?.isEmpty == false
+        return hasLocal ? local : external.appending(path: "assets")
+    }
+
     /// ⚠️ 반드시 **심볼릭 링크를 푼 실제 경로**로 돌려준다.
     ///
     /// iOS 가 주는 경로는 `/var/mobile/…` 인데 실제로는 `/private/var/mobile/…` 이다.

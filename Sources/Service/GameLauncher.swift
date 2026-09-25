@@ -668,7 +668,7 @@ struct GameLauncher {
             let virtual: Bool?
             let map_to_resources: Bool?
         }
-        let assets = instanceDir.appending(path: "assets")
+        let assets = Paths.assets(for: instanceDir)
         guard let data = try? Data(contentsOf: assets.appending(path: "indexes/\(indexId).json")),
               let index = try? JSONDecoder().decode(Index.self, from: data),
               index.virtual == true || index.map_to_resources == true
@@ -697,7 +697,7 @@ struct GameLauncher {
         let uuid = session?.uuid ?? "00000000-0000-0000-0000-000000000000"
         let accessToken = session?.accessToken ?? "0"
         let userType = session != nil ? "msa" : "mojang"
-        let assetsDir = dir.appending(path: "assets").path
+        let assetsDir = Paths.assets(for: dir).path
         let versionType = meta.loaderType.map { $0.capitalized } ?? "release"
 
         // 매니페스트가 준 인자 안에 `${...}` 가 있다는 사실 자체가 레거시 포맷 시그널이다.
