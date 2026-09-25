@@ -1141,6 +1141,39 @@ final class FlameLauncherTests: XCTestCase {
         XCTAssertEqual(fewSeen.count, 3)
     }
 
+
+    // MARK: - 모드 이름 규칙
+
+    /// Sodium 본체를 못 알아보면 Podium 이 자동 설치되지 않고, Sodium 은 Pojav 계열 환경에서
+    /// 스스로 실행을 거부한다 — 게임이 아예 안 켜진다. 조용히 깨지는 종류라 따로 본다.
+    func testSodiumBodyIsRecognizedAcrossNamingEras() {
+        let bodies: Set<String> = ["sodium", "sodium-fabric", "sodium-neoforge", "embeddium"]
+        let real = [
+            "sodium-fabric-0.9.2+mc26.3.jar",             // 요즘(26.x)
+            "sodium-neoforge-0.9.3-alpha.1+mc26.3.jar",
+            "sodium-fabric-0.5.13+mc1.20.1.jar",
+            "sodium-fabric-mc1.20.1-0.5.0.jar",           // MC 버전이 중간에 오던 시절
+            "sodium-fabric-mc1.16.3-0.1.0.jar",
+            "sodium-fabric-mc1.17.1-0.3.4+build.13.jar",
+            "embeddium-0.3.31+mc1.20.1.jar",
+        ]
+        for name in real {
+            XCTAssertTrue(bodies.contains(ContentInstaller.modFilePrefix(name).lowercased()),
+                          "본체로 못 알아봄: \(name)")
+        }
+
+        // 부가 모드는 본체로 오인하면 안 된다.
+        for name in ["sodium-extra-0.5.9+mc1.20.1.jar",
+                     "reeses-sodium-options-1.7.2+mc1.20.1-build.101.jar",
+                     "indium-1.0.34+mc1.21.jar"] {
+            XCTAssertFalse(bodies.contains(ContentInstaller.modFilePrefix(name).lowercased()),
+                           "본체로 오인: \(name)")
+        }
+
+        // 이름이 mc 로 시작할 뿐인 모드는 건드리지 않는다.
+        XCTAssertEqual(ContentInstaller.modFilePrefix("mcw-doors-1.1.0-mc1.20.1.jar"), "mcw-doors")
+    }
+
 }
 
 /// 위 테스트 전용 — 몇 개가 동시에 돌았는지, 무엇이 돌았는지 센다.

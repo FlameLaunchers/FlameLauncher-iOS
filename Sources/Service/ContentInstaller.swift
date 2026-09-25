@@ -388,12 +388,21 @@ struct ContentInstaller {
 
     /// 파일 이름에서 버전 앞부분(모드 이름)만 잘라낸다.
     /// "sodium-fabric-0.8.12+mc1.21.1.jar" → "sodium-fabric"
+    /// "sodium-fabric-mc1.20.1-0.5.0.jar"  → "sodium-fabric" (MC 버전이 **중간**에 오던 옛 배포본)
     /// "reeses-sodium-options-fabric-2.2.3.jar" → "reeses-sodium-options-fabric" (본체가 아니라 제외된다)
+    ///
+    /// ⚠️ 가운데 `mc1.20.1` 토큰을 안 끊으면 prefix 가 "sodium-fabric-mc1.20.1" 이 돼서 Sodium
+    ///    본체로 인식되지 않는다 → Podium 이 조용히 안 깔리고, Sodium 은 Pojav 계열 환경에서
+    ///    스스로 실행을 거부하므로 게임이 아예 안 켜진다(0.5.3 이전 배포본 30개가 이 형태다).
     static func modFilePrefix(_ fileName: String) -> String {
         let stem = fileName.hasSuffix(".jar") ? String(fileName.dropLast(4)) : fileName
         var parts: [Substring] = []
         for piece in stem.split(whereSeparator: { $0 == "-" || $0 == "_" }) {
             if piece.first?.isNumber == true { break }
+            // "mc1.20.1" 같은 버전 토큰도 숫자와 같게 취급한다. "mcw-doors" 처럼 mc 로 시작만
+            // 하는 이름은 그대로 둔다 — 바로 뒤가 숫자일 때만 버전으로 본다.
+            if piece.count > 2, piece.hasPrefix("mc") || piece.hasPrefix("MC"),
+               piece.dropFirst(2).first?.isNumber == true { break }
             parts.append(piece)
         }
         return parts.isEmpty ? stem : parts.joined(separator: "-")

@@ -154,8 +154,17 @@ enum LoaderAPI {
         "https://maven.neoforged.net/releases/net/neoforged/neoforge/\(version)/neoforge-\(version)-installer.jar"
     }
 
+    /// 네오포지 버전 → 대응 MC 버전.
+    ///
+    /// 스키마가 두 가지다:
+    ///  - 세 조각 `21.1.251`       → `1.21.1` (MC 가 1.x 이던 시절, 앞의 `1.` 이 생략돼 있다)
+    ///  - 네 조각 `26.3.0.22-beta` → `26.3`   (26 부터 MC 버전이 1.x 가 아니다)
+    /// 네 조각을 안 다루면 26.x 에서 목록이 통째로 비어 "네오포지 없음" 으로 보인다.
     private static func neoForgeVersionToMc(_ v: String) -> String? {
         let parts = v.split(separator: "-")[0].split(separator: ".")
+        if parts.count >= 4, let major = Int(parts[0]), let minor = Int(parts[1]) {
+            return "\(major).\(minor)"
+        }
         guard parts.count >= 3, let minor = Int(parts[0]), let patch = Int(parts[1]) else { return nil }
         return patch == 0 ? "1.\(minor)" : "1.\(minor).\(patch)"
     }
