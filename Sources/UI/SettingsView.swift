@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var settings = JvmSettingsStore.load()
     @State private var renderer = RendererStore.load()
     @State private var saved = false
+    @State private var language = AppLanguage.current
 
     private let ceiling = JvmSettingsStore.maxHeapCeilingMb
 
@@ -26,6 +27,7 @@ struct SettingsView: View {
                             .background(FlameColor.primary.opacity(0.1))
                     }
 
+                    languageSection
                     rendererSection
                     screenSection
                     memorySection
@@ -59,6 +61,32 @@ struct SettingsView: View {
     }
 
     // MARK: - 섹션
+
+    private var languageSection: some View {
+        Section(String(localized: "언어"),
+                note: String(localized: "고르면 다음에 앱을 열 때부터 그 언어로 나옵니다.")) {
+            ForEach(AppLanguage.allCases) { item in
+                Button {
+                    language = item
+                    AppLanguage.apply(item)
+                } label: {
+                    HStack {
+                        Text(item.displayName)
+                            .font(.system(size: Sizing.isTablet ? 14 : 12, weight: .bold))
+                            .foregroundStyle(FlameColor.textMain)
+                        Spacer()
+                        if language == item {
+                            Text("✓").foregroundStyle(FlameColor.primary).fontWeight(.bold)
+                        }
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .flameSelectableCard(selected: language == item)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
 
     private var rendererSection: some View {
         Section("기본 렌더러", note: "새 인스턴스가 사용할 렌더러. 인스턴스별로 따로 지정할 수도 있어요.") {

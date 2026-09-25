@@ -218,7 +218,7 @@ struct GameView: View {
                     if let reason = NativeJavaRuntime.launchFailureReason(code) {
                         bootError = reason
                     } else if code != 0 {
-                        bootError = "JVM 이 코드 \(code) 로 종료했습니다. 로그를 확인해 주세요."
+                        bootError = String(localized: "JVM 이 코드 \(code) 로 종료했습니다. 로그를 확인해 주세요.")
                     } else {
                         // 게임이 스스로 끝났다 — JVM 은 이미 죽어서 다시 못 띄운다.
                         quitGame(saveFirst: false)

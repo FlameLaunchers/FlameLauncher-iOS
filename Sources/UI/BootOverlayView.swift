@@ -39,7 +39,7 @@ struct BootOverlayView: View {
                                 .font(.system(size: Sizing.isCompact ? 12 : 16, weight: .bold))
                                 .foregroundStyle(FlameColor.textMain)
                             Text(modCount > 0
-                                 ? "모드 \(modCount)개를 불러오는 중이에요. 첫 실행은 최대 \(maxDelayMinutes)분 정도 걸릴 수 있어요."
+                                 ? String(localized: "모드 \(modCount)개를 불러오는 중이에요. 첫 실행은 최대 \(maxDelayMinutes)분 정도 걸릴 수 있어요.")
                                  : String(localized: "잠시만 기다려 주세요."))
                                 .font(.system(size: Sizing.isCompact ? 9 : 12))
                                 .foregroundStyle(FlameColor.textSub)

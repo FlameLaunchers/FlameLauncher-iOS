@@ -422,7 +422,7 @@ struct ContentInstaller {
                 type = .resourcepack
             }
         default:
-            throw LoaderInstallError.unsupported("지원하지 않는 파일 형식: .\(url.pathExtension)")
+            throw LoaderInstallError.unsupported(String(localized: "지원하지 않는 파일 형식: .\(url.pathExtension)"))
         }
 
         let folder = meta.dir.appending(path: type.installFolder)
@@ -435,6 +435,6 @@ struct ContentInstaller {
             try? FileManager.default.removeItem(at: dest)
             try FileManager.default.copyItem(at: url, to: dest)
         }
-        return "\(type.label)(으)로 가져왔습니다: \(name)"
+        return String(localized: "\(type.label)(으)로 가져왔습니다: \(name)")
     }
 }

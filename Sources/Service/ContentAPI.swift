@@ -180,14 +180,28 @@ enum ModrinthAPI {
     }
 
     private struct Project: Decodable {
+        struct GalleryImage: Decodable {
+            let url: String
+            let featured: Bool?
+        }
         let body: String?
         let title: String
+        let gallery: [GalleryImage]?
     }
 
     /// 상세 화면의 긴 설명(markdown).
     static func description(id: String) async -> String? {
         guard let url = URL(string: "\(base)/project/\(id)") else { return nil }
         return try? await HTTP.json(Project.self, from: url, headers: headers).body
+    }
+
+    /// 상세 화면 위쪽에 넘겨 보는 스크린샷. featured 를 앞에 둔다.
+    static func screenshots(id: String) async -> [URL] {
+        guard let url = URL(string: "\(base)/project/\(id)") else { return [] }
+        guard let project = try? await HTTP.json(Project.self, from: url, headers: headers) else { return [] }
+        let images = project.gallery ?? []
+        return (images.filter { $0.featured == true } + images.filter { $0.featured != true })
+            .compactMap { URL(string: $0.url) }
     }
 
     private struct Version: Decodable {
@@ -319,9 +333,24 @@ enum CurseForgeAPI {
 
     private struct DescriptionResponse: Decodable { let data: String }
 
+    private struct ModResponse: Decodable {
+        struct Mod: Decodable {
+            struct Screenshot: Decodable { let url: String }
+            let screenshots: [Screenshot]?
+        }
+        let data: Mod
+    }
+
     static func description(id: String) async -> String? {
         guard isConfigured, let url = URL(string: "\(base)/mods/\(id)/description") else { return nil }
         return try? await HTTP.json(DescriptionResponse.self, from: url, headers: headers).data
+    }
+
+    /// 상세 화면 위쪽에 넘겨 보는 스크린샷.
+    static func screenshots(id: String) async -> [URL] {
+        guard isConfigured, let url = URL(string: "\(base)/mods/\(id)") else { return [] }
+        guard let res = try? await HTTP.json(ModResponse.self, from: url, headers: headers) else { return [] }
+        return (res.data.screenshots ?? []).compactMap { URL(string: $0.url) }
     }
 
     private struct FilesResponse: Decodable {
@@ -471,6 +500,14 @@ enum ContentAPI {
         switch item.source {
         case .modrinth:   return await ModrinthAPI.description(id: item.id)
         case .curseforge: return await CurseForgeAPI.description(id: item.id)
+        }
+    }
+
+    /// 상세 화면의 스크린샷 목록. 없으면 빈 배열이다(안드로이드 상세 화면과 같은 자리).
+    static func screenshots(_ item: ContentItem) async -> [URL] {
+        switch item.source {
+        case .modrinth:   return await ModrinthAPI.screenshots(id: item.id)
+        case .curseforge: return await CurseForgeAPI.screenshots(id: item.id)
         }
     }
 

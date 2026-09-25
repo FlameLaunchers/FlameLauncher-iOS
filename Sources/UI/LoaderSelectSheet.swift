@@ -80,7 +80,7 @@ struct LoaderSelectSheet: View {
         } else if builds.isEmpty {
             VStack(spacing: 8) {
                 Text("😕").font(.system(size: 40))
-                Text("MC \(version.id) 용 \(loader.displayName) 빌드가 없어요")
+                Text(String(localized: "MC \(version.id) 용 \(loader.displayName) 빌드가 없어요"))
                     .font(.system(size: 13)).foregroundStyle(FlameColor.textSub)
                     .multilineTextAlignment(.center)
             }

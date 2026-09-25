@@ -33,7 +33,7 @@ struct LoaderInstaller {
         _ loader: ModLoader, mcVersion: String, loaderVersion: String
     ) async throws -> LoaderInstallResult {
         onProgress(DownloadProgress(phase: .installingLoader,
-                                    fileName: "\(loader.displayName) 프로필"))
+                                    fileName: String(localized: "\(loader.displayName) 프로필")))
 
         let raw = try await LoaderAPI.loaderProfile(loader, mcVersion: mcVersion,
                                                    loaderVersion: loaderVersion)

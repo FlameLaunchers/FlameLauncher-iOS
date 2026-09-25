@@ -180,7 +180,7 @@ struct InstanceSettingsView: View {
     }
 
     private func modsSection(_ meta: InstanceMeta) -> some View {
-        card(title: "설치된 모드 (\(mods.count)개)", note: nil) {
+        card(title: String(localized: "설치된 모드 (\(mods.count)개)"), note: nil) {
             if mods.isEmpty {
                 Text("이 인스턴스에 설치된 모드가 없어요")
                     .font(.system(size: 12)).foregroundStyle(FlameColor.textSub)

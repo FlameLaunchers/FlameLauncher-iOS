@@ -105,9 +105,9 @@ struct DownloadProgress: Equatable {
         switch phase {
         case .fetchingManifest:     return String(localized: "버전 정보 가져오는 중...")
         case .downloadingClient:    return String(localized: "클라이언트 내려받는 중...")
-        case .downloadingLibraries: return "라이브러리 \(current)/\(total)"
-        case .downloadingAssets:    return "에셋 \(current)/\(total)"
-        case .installingLoader:     return "모드 로더 설치 중... \(fileName)"
+        case .downloadingLibraries: return String(localized: "라이브러리 \(current)/\(total)")
+        case .downloadingAssets:    return String(localized: "에셋 \(current)/\(total)")
+        case .installingLoader:     return String(localized: "모드 로더 설치 중... \(fileName)")
         case .error:                return "❌ " + (error ?? String(localized: "오류"))
         default:                    return ""
         }

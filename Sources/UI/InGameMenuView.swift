@@ -91,7 +91,7 @@ struct InGameMenuView: View {
 
     private var multiplayerSubtitle: String {
         switch terracotta.state {
-        case .hostOK(let room):  return "방 열림 · \(room)"
+        case .hostOK(let room):  return String(localized: "방 열림 · \(room)")
         case .guestOK:           return String(localized: "연결됨")
         case .failed(let why):   return why
         case .stopped:           return String(localized: "월드를 LAN 에 공개한 뒤 방을 여세요")

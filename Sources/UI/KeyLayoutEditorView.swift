@@ -87,7 +87,7 @@ struct KeyLayoutEditorView: View {
 
     private func inspector(_ button: KeyButton) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("\(button.label) 편집")
+            Text(String(localized: "\(button.label) 편집"))
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(FlameColor.textMain)
 

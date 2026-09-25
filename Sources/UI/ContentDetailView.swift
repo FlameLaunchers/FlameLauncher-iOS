@@ -8,6 +8,8 @@ struct ContentDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var description: String?
+    /// 상세 위쪽에 넘겨 보는 스크린샷. 안드로이드 상세 화면과 같은 자리다.
+    @State private var screenshots: [URL] = []
     @State private var files: [ContentFile] = []
     @State private var isLoading = true
     @State private var progress = DownloadProgress()
@@ -34,6 +36,8 @@ struct ContentDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     header
+
+                    if !screenshots.isEmpty { gallery }
 
                     if progress.isActive {
                         ProgressRow(progress: progress).padding(.vertical, 4)
@@ -75,6 +79,30 @@ struct ContentDetailView: View {
         } message: {
             Text(result ?? "")
         }
+    }
+
+    /// 스크린샷 가로 스크롤. 사진이 없으면 아예 그리지 않는다.
+    private var gallery: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(screenshots, id: \.self) { url in
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        case .failure:
+                            // 못 받은 사진은 자리만 비워 둔다 — 목록이 밀리지 않게.
+                            FlameColor.bgSurface
+                        default:
+                            ZStack { FlameColor.bgSurface; ProgressView().tint(FlameColor.primary) }
+                        }
+                    }
+                    .frame(width: Sizing.isCompact ? 200 : 280, height: Sizing.isCompact ? 112 : 158)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+            }
+        }
+        .frame(height: Sizing.isCompact ? 112 : 158)
     }
 
     private var header: some View {
@@ -191,9 +219,10 @@ struct ContentDetailView: View {
         targetInstanceId = targetInstanceId ?? instances.first?.id
         let filter = versionFilter
         async let desc = ContentAPI.description(item)
+        async let shots = ContentAPI.screenshots(item)
         async let list = ContentAPI.files(item, gameVersion: filter.gameVersion,
                                           loader: filter.loader)
-        (description, files) = await (desc, list)
+        (description, screenshots, files) = await (desc, shots, list)
         isLoading = false
     }
 
@@ -220,10 +249,10 @@ struct ContentDetailView: View {
                 let meta = try await installer.installModpack(
                     item, file: file, versions: launcher.versions
                 )
-                result = "\(meta.name) 설치 완료 — 설치됨 탭에서 실행하세요."
+                result = String(localized: "\(meta.name) 설치 완료 — 설치됨 탭에서 실행하세요.")
             } else if let target {
                 try await installer.installFile(file, type: item.type, source: item.source, into: target)
-                var message = "\(target.name) 에 \(file.fileName) 을(를) 넣었습니다."
+                var message = String(localized: "\(target.name) 에 \(file.fileName) 을(를) 넣었습니다.")
                 if item.type == .shader,
                    let note = ContentInstaller.shaderPrerequisiteNote(for: target) {
                     message += "\n\n⚠️ " + note
