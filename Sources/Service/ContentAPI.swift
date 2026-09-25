@@ -1,3 +1,5 @@
+import CommonCrypto
+import CryptoKit
 import Foundation
 
 /// 컨텐츠 소스. 안드로이드 `ContentSource` 이식.
@@ -265,14 +267,54 @@ enum CurseForgeAPI {
 
     /// 키는 번들의 `Secrets.plist` 에서 읽는다 — 저장소에 올리지 않는 파일이라
     /// 안드로이드의 `local.properties` 와 같은 역할이다.
-    /// (Info.plist 쪽도 계속 지원한다. CI 등에서 빌드 설정으로 주입할 수 있게)
-    static var apiKey: String {
+    ///
+    /// 평문이 아니라 **AES-256-CBC 암호문**이 들어 있다(Scripts/write-secrets.sh 가 만든다).
+    /// 열쇠는 `SHA-256(암호구절)`, 암호구절은 저장소 밖에 둔다.
+    /// ⚠️ 난독화지 보안이 아니다 — 복호화에 필요한 게 전부 앱 안에 있다. 목적은 소스·저장소·
+    ///    `strings` 덤프에서 평문 키를 없애는 것뿐이고, 남용되면 키를 새로 발급하는 수밖에 없다.
+    /// (평문을 넣던 옛 Info.plist 경로도 계속 지원한다 — CI 가 빌드 설정으로 주입할 수 있게)
+    static let apiKey: String = {
         if let url = Bundle.main.url(forResource: "Secrets", withExtension: "plist"),
-           let dict = NSDictionary(contentsOf: url),
-           let key = dict["CURSEFORGE_API_KEY"] as? String, !key.isEmpty {
-            return key
+           let dict = NSDictionary(contentsOf: url) {
+            if let cipher = dict["CURSEFORGE_KEY_CIPHER"] as? String,
+               let iv = dict["CURSEFORGE_KEY_IV"] as? String,
+               let pass = dict["CURSEFORGE_KEY_PASS"] as? String,
+               let key = decryptKey(cipherB64: cipher, ivB64: iv, passB64: pass) {
+                return key
+            }
+            if let key = dict["CURSEFORGE_API_KEY"] as? String, !key.isEmpty { return key }
         }
         return Bundle.main.object(forInfoDictionaryKey: "CURSEFORGE_API_KEY") as? String ?? ""
+    }()
+
+    /// AES-256-CBC 복호화. CryptoKit 은 CBC 를 안 다뤄서 CommonCrypto 를 쓴다.
+    private static func decryptKey(cipherB64: String, ivB64: String, passB64: String) -> String? {
+        guard let cipherData = Data(base64Encoded: cipherB64),
+              let iv = Data(base64Encoded: ivB64),
+              let pass = Data(base64Encoded: passB64),
+              iv.count == kCCBlockSizeAES128, !cipherData.isEmpty
+        else { return nil }
+
+        let aesKey = Data(SHA256.hash(data: pass))
+        var out = Data(count: cipherData.count + kCCBlockSizeAES128)
+        let outCount = out.count   // 클로저 안에서 out 을 또 읽으면 배타 접근 위반이다
+        var moved = 0
+        let status: CCCryptorStatus = out.withUnsafeMutableBytes { outBuf in
+            cipherData.withUnsafeBytes { inBuf in
+                iv.withUnsafeBytes { ivBuf in
+                    aesKey.withUnsafeBytes { keyBuf in
+                        CCCrypt(CCOperation(kCCDecrypt), CCAlgorithm(kCCAlgorithmAES),
+                                CCOptions(kCCOptionPKCS7Padding),
+                                keyBuf.baseAddress, kCCKeySizeAES256,
+                                ivBuf.baseAddress,
+                                inBuf.baseAddress, cipherData.count,
+                                outBuf.baseAddress, outCount, &moved)
+                    }
+                }
+            }
+        }
+        guard status == kCCSuccess else { return nil }
+        return String(data: out.prefix(moved), encoding: .utf8).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     static var isConfigured: Bool { !apiKey.isEmpty }

@@ -41,3 +41,6 @@ target/
 xcuserdata/
 *.xcuserstate
 .swiftpm/
+
+# 암호화 열쇠 — 절대 올리지 않는다
+.secrets/
