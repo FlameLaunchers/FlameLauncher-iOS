@@ -89,6 +89,12 @@ struct ForgeInstallPlanner {
     /// 계획 안의 "설치 전용" 목록 키. 게임 클래스패스에서 제외할 라이브러리들이다.
     static let installOnlyKey = "installOnly"
 
+    /// 로더 자신의 코드가 든 jar(neoforge/forge universal·client). 설치 전용으로 볼 수 없다.
+    static func isLoaderOwnJar(_ relativePath: String) -> Bool {
+        relativePath.contains("/net/neoforged/neoforge/")
+            || relativePath.contains("/net/minecraftforge/forge/")
+    }
+
     /// 계획이 지정한 설치 전용 라이브러리(인스턴스 기준 상대경로).
     static func installOnlyPaths(instanceDir: URL) -> Set<String> {
         let file = instanceDir.appending(path: planFileName)
@@ -145,7 +151,13 @@ struct ForgeInstallPlanner {
         //    설치 도구들은 같은 라이브러리의 다른 버전을 끌고 온다(jopt-simple, asm, srgutils …).
         //    Forge 는 모듈 경로를 쓰기 때문에 같은 패키지를 두 모듈이 export 하면 부팅이 막힌다:
         //      "Modules jopt.simple and joptsimple export package joptsimple"
-        let installOnly = installed.subtracting(gameJars)
+        // ⚠️ 단, **로더 본체**는 예외다. NeoForge 26.x 는 neoforge-…-universal.jar 을 설치
+        //    프로필로만 들고 오고 version.json 에는 올리지 않아서, 위 규칙대로면 게임
+        //    클래스패스에서 빠진다. 그러면 FML 이 자기 클래스(NeoForgeMod)를 못 찾고
+        //    엉뚱한 메시지로 죽는다:
+        //      Couldn't find [net/neoforged/neoforge/common/NeoForgeMod.class, …]
+        //      The patched Minecraft jar is missing. Please try to reinstall NeoForge.
+        let installOnly = Set(installed.subtracting(gameJars).filter { !Self.isLoaderOwnJar($0) })
 
         // 2) data 값 풀기 — 자리표시자의 실제 값이 여기 들어 있다.
         let data = try resolveData(profile["data"] as? [String: Any] ?? [:])

@@ -416,9 +416,19 @@ struct GameLauncher {
                 "-Dflame.forge.plan=\(planFile.path)",
             ]
             // 프로세서가 부르는 System.exit 를 막으려면 SecurityManager 설치가 필요하다.
-            // ⚠️ "allow" 는 JDK 12+ 에서만 특별한 값이다. Java 8 은 이걸 **클래스 이름**으로
-            //    읽고 못 찾아 JVM 이 죽는다 — 그리고 Java 8 은 이 설정 없이도 설치를 허용한다.
-            if java.majorVersion >= 12 { argv.append("-Djava.security.manager=allow") }
+            // ⚠️ "allow" 는 JDK 12~23 에서만 쓸 수 있는 값이다.
+            //    - Java 8 은 이걸 **클래스 이름**으로 읽고 못 찾아 JVM 이 죽는다(그리고 8 은
+            //      이 설정 없이도 설치를 허용한다).
+            //    - JDK 24 부터는 SecurityManager 가 완전히 막혀서(JEP 486) 이 옵션만 있어도
+            //      VM 이 아예 안 뜬다:
+            //        Error occurred during initialization of VM
+            //        java.lang.Error: A command line option has attempted to allow or enable
+            //        the Security Manager. Enabling a Security Manager is not supported.
+            //      26.3 은 Java 25 를 쓰므로 Forge·NeoForge 가 이 줄 하나로 전부 죽었다.
+            //      그 위에서는 ExitGuard 설치가 조용히 실패하고 넘어간다(ForgeInstaller 참고).
+            if (12...23).contains(java.majorVersion) {
+                argv.append("-Djava.security.manager=allow")
+            }
         }
         argv += settings.jvmArgs(
             instanceDir: dir,
@@ -570,6 +580,7 @@ struct GameLauncher {
     /// - Parameter excluding: 모듈 경로(`-p`)에 이미 올린 jar. 클래스패스에서 뺀다.
     private func buildClassPath(excluding modulePath: Set<String> = []) -> String {
         let dir = meta.dir
+        let isNeoForge = meta.loaderType == ModLoader.neoforge.rawValue
         var entries: [String] = []
 
         // 1) 패치된 LWJGL (앱 번들)
@@ -634,14 +645,53 @@ struct GameLauncher {
                 //      "Modules text2speech and launcher export package com.mojang.text2speech"
                 //    (Fabric 은 모듈 경로를 안 써서 드러나지 않았다)
                 guard !url.lastPathComponent.hasPrefix("text2speech") else { continue }
+                // ⚠️ 같은 이유로 java-objc-bridge 도 뺀다. 26.3 부터 마인크래프트가 macOS 용
+                //    ca.weblite:java-objc-bridge 를 라이브러리로 들고 오는데, libs/launcher.jar
+                //    에도 ca.weblite.objc 가 들어 있어 Forge 모듈 경로에서 부팅이 막힌다:
+                //      "Modules launcher and javaobjectivecbridge export package ca.weblite.objc"
+                //    (macOS 전용 브릿지라 이 기기에서는 원본을 쓸 일도 없다)
+                guard !url.lastPathComponent.hasPrefix("java-objc-bridge") else { continue }
+                // ⚠️ NeoForge: 게임 jar 과 NeoForge 본체를 **클래스패스에 올리면 안 된다.**
+                //    GameLocator 는 이렇게 갈린다(loader-12.0.0.jar 디스어셈블로 확인):
+                //      var found = RequiredSystemFiles.find(ctx, classLoader);
+                //      if (found.isEmpty()) → "Assuming we're launching production"
+                //                           → locateProductionMinecraft(...)   ← 정상 경로
+                //      else                 → 개발 환경 취급 → NeoForgeDevDistCleaner 가
+                //                             Minecraft-Dists 매니페스트 속성을 요구하며 죽는다
+                //    찾는 대상은 DetectedVersion·Minecraft.class·.mcassetsroot·NeoForgeMod 등이라,
+                //    바닐라/패치 게임 jar 이나 neoforge universal 이 하나라도 보이면 개발로 샌다.
+                //    production 경로는 libraryDirectory 에서 좌표로 직접 찾아 올린다.
+                if isNeoForge, url.path.contains("/libraries/net/neoforged/minecraft-client-patched/")
+                    || (isNeoForge && url.path.contains("/libraries/net/neoforged/neoforge/")) {
+                    continue
+                }
+
+                // 데스크톱 네이티브 묶음(-natives-linux/macos/windows)은 이 기기에서 쓸 데가 없고,
+                // 본체 jar 과 같은 모듈 이름을 달고 올라와 "duplicate module" 경고를 쏟는다.
+                guard !url.lastPathComponent.contains("-natives-") else { continue }
                 let relative = url.path.replacingOccurrences(of: dir.path + "/", with: "")
-                guard !installOnly.contains(relative) else { continue }
+                // 이미 만들어진 인스턴스의 계획 파일에는 로더 본체가 설치 전용으로 잘못
+                // 적혀 있을 수 있다(2026-09 이전 빌드). 다시 설치하지 않아도 낫도록 여기서도 막는다.
+                guard !installOnly.contains(relative)
+                        || ForgeInstallPlanner.isLoaderOwnJar(relative) else { continue }
                 entries.append(url.path)
             }
         }
 
         // 4) 클라이언트 JAR
-        entries.append(dir.appending(path: "versions/\(meta.mcVersion)/\(meta.mcVersion).jar").path)
+        //
+        // ⚠️ NeoForge 에서는 **순서가 판정을 가른다.** FML 은 두 가지를 따로 본다:
+        //     · detectProduction: 클래스패스에서 처음 만나는 net/minecraft/SharedConstants.class
+        //       를 읽어 "net/neoforged/fml" 이 들어 있으면 개발 환경으로 본다. 패치된 jar 은
+        //       그 참조를 담고 있으므로(정상적인 바이너리 패치다) 먼저 걸리면 DEV 로 오판한다.
+        //     · RequiredSystemFiles: 클래스패스 **전체**를 훑어 DetectedVersion·Minecraft.class·
+        //       .mcassetsroot 를 찾는다. 하나라도 없으면 "patched jar is missing" 으로 죽는다.
+        //    바닐라 jar 을 앞에 두면 첫 조건은 바닐라(fml 참조 없음)로 통과하고, 둘째 조건은
+        //    두 jar 을 합쳐 만족한다. 그래서 바닐라를 **맨 앞**에 끼운다.
+        // NeoForge 는 바닐라 jar 도 빼야 한다(위 설명 — 하나라도 보이면 개발 환경으로 샌다).
+        if !isNeoForge {
+            entries.append(dir.appending(path: "versions/\(meta.mcVersion)/\(meta.mcVersion).jar").path)
+        }
 
         // 모듈 경로에 올라간 아티팩트는 **버전이 달라도** 클래스패스에서 뺀다.
         let moduleArtifacts = Set(modulePath.map(Self.artifactKey))
