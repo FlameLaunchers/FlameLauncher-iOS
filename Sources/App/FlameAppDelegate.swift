@@ -30,7 +30,8 @@ final class FlameAppDelegate: UIResponder, UIApplicationDelegate {
         host.overrideUserInterfaceStyle = .dark
         host.view.backgroundColor = UIColor(FlameColor.bgDark)
 
-        let window = UIWindow(frame: UIScreen.main.bounds)
+        // 씬 기하를 스스로 따라가는 창 — 레이아웃마다 확인한다(FlameWindow 설명 참고).
+        let window = FlameWindow(frame: UIScreen.main.bounds)
         window.rootViewController = host
         window.makeKeyAndVisible()
         self.window = window

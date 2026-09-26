@@ -72,20 +72,27 @@ enum OrientationLock {
     ///
     ///    StikDebug 를 다녀오면 재발하던 이유: 그때만 씬 기하가 갱신되는데 창이 안 따라간다.
     static func attachToScene(_ window: UIWindow?) {
-        guard let window,
-              let scene = UIApplication.shared.connectedScenes
-                  .compactMap({ $0 as? UIWindowScene })
-                  .first(where: { $0.activationState != .unattached })
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState != .unattached })
         else { return }
 
-        if window.windowScene !== scene { window.windowScene = scene }
+        if let window, window.windowScene !== scene { window.windowScene = scene }
 
         let bounds = scene.coordinateSpace.bounds
-        guard window.frame != bounds, bounds.width > 0, bounds.height > 0 else { return }
-        print("[FlameLauncher] 창을 씬 기하에 맞춥니다: "
-              + "\(Int(window.frame.width))x\(Int(window.frame.height))"
-              + " → \(Int(bounds.width))x\(Int(bounds.height))")
-        window.frame = bounds
+        guard bounds.width > 0, bounds.height > 0 else { return }
+
+        // ⚠️ 우리 창만 고치면 안 된다. 26.x 는 SDL 이 자기 UIWindow 를 따로 만들어 붙이는데,
+        //    그 창이 세로 프레임으로 굳으면 게임 화면만 세로로 남는다(우리 창은 멀쩡하다).
+        //    씬에 달린 창을 전부 훑어 기하에 맞춘다.
+        var targets = scene.windows
+        if let window, !targets.contains(window) { targets.append(window) }
+        for target in targets where target.frame != bounds {
+            print("[FlameLauncher] 창을 씬 기하에 맞춥니다(\(type(of: target))): "
+                  + "\(Int(target.frame.width))x\(Int(target.frame.height))"
+                  + " → \(Int(bounds.width))x\(Int(bounds.height))")
+            target.frame = bounds
+        }
     }
 
     /// 씬 기하가 바뀌거나 기기가 돌 때마다 가로·창 프레임을 다시 맞춘다.
@@ -131,5 +138,24 @@ enum OrientationLock {
     /// 활성화될 때마다 한 번 더 요청해서 그 창을 없앤다.
     static func reassert() {
         apply(FlameAppDelegate.orientationMask)
+    }
+}
+
+/// 씬 기하를 **스스로 따라가는** 창.
+///
+/// ⚠️ 이 앱에는 씬 델리게이트가 없다(레거시 `UIWindow(frame:)`). 그런 창은 씬에 붙여 놔도
+///    기하가 바뀔 때 프레임이 자동으로 따라오지 않는다. 그래서 알림·KVO 로 바깥에서
+///    고쳐 왔는데, 알림이 오지 않는 경로(런처를 막 띄운 직후, SwiftUI 가 자체적으로
+///    레이아웃을 한 번 더 도는 경우)에서는 세로 프레임이 그대로 굳었다 —
+///    "메인 화면이 세로로 바뀐다" 가 이 경우다.
+///
+///    레이아웃이 돌 때마다 스스로 맞추면 어떤 경로로 어긋나든 다음 프레임에 복구된다.
+final class FlameWindow: UIWindow {
+    override func layoutSubviews() {
+        if let bounds = windowScene?.coordinateSpace.bounds,
+           bounds.width > 0, bounds.height > 0, frame != bounds {
+            frame = bounds
+        }
+        super.layoutSubviews()
     }
 }
