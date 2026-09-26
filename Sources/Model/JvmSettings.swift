@@ -449,7 +449,17 @@ struct JvmSettings: Codable, Equatable {
             "-Dglfw.windowSize=\(screenSize.0)x\(screenSize.1)",
             // LWJGL 이 GL 함수 포인터를 어느 dylib 에서 가져올지. GL.createCapabilities()
             // 가 이걸 읽으므로 JVM 시작 시점에 이미 정해져 있어야 한다.
-            "-Dorg.lwjgl.opengl.libname=\(renderer.libName)",
+            // ⚠️ **절대경로로 준다.** 26.3 의 GlBackend.loadLibrary 는 LWJGL 이 연 GL 파일의
+            //    경로를 그대로 SDL 에 넘긴다:
+            //      SDL_GL_LoadLibrary(((SharedLibrary) GL.getFunctionProvider()).getPath())
+            //    SDL 은 이미 다른 경로로 GL 을 열어 뒀으면 문자열 비교로 거절한다:
+            //      BackendCreationException: OpenGL is not supported: OpenGL library already loaded
+            //    그러면 게임은 Vulkan 으로 떨어지고, GL 만 쓰는 Iris 가 컨텍스트 없이 호출하다
+            //    JVM 을 통째로 죽인다("No context is current" → FATAL ERROR in native method).
+            //    아래 SDL_OPENGL_LIBRARY 와 **같은 문자열**이어야 SDL 이 같은 파일로 인정한다.
+            //    (안드로이드도 같은 이유로 절대경로를 쓴다)
+            "-Dorg.lwjgl.opengl.libname=\(baseFrameworks)/\(renderer.libName)",
+            "-Dorg.lwjgl.opengles.libname=\(baseFrameworks)/\(renderer.libName)",
             // MoltenVK 는 파일 이름이 표준과 달라 LWJGL 이 못 찾는다(래퍼가 하던 일).
             "-Dorg.lwjgl.vulkan.libname=libMoltenVK.dylib",
             // SPIRV-Cross — 마인크래프트 26.2 부터 부팅할 때 무조건 로드한다.

@@ -321,6 +321,20 @@ struct GameLauncher {
         guard let data = try? JSONSerialization.data(withJSONObject: config,
                                                      options: [.prettyPrinted]) else { return }
         try? data.write(to: dir.appending(path: "config.json"), options: .atomic)
+        dropStaleGlslCache(in: dir)
+    }
+
+    /// MobileGlues 는 변환한 GLSL 을 **원본의 sha256** 으로만 캐시한다 — 변환기(=dylib)가
+    /// 바뀐 걸 모른다. 앱을 새로 깔아도 깨진 옛 결과가 그대로 나오므로, dylib 이 바뀌면 버린다.
+    private static func dropStaleGlslCache(in dir: URL) {
+        let dylib = Bundle.main.bundleURL.appending(path: "Frameworks/libmobileglues.dylib")
+        guard let built = (try? dylib.resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate else { return }
+        let stamp = dir.appending(path: "translator.stamp")
+        let mark = String(built.timeIntervalSince1970)
+        if (try? String(contentsOf: stamp, encoding: .utf8)) == mark { return }
+        try? FileManager.default.removeItem(at: dir.appending(path: "glsl_cache.tmp"))
+        try? mark.write(to: stamp, atomically: true, encoding: .utf8)
     }
 
     static func repairUnreadableFiles(in dir: URL) {
@@ -361,6 +375,7 @@ struct GameLauncher {
 
         // options.txt / iris.properties 는 부팅 전에 맞춰둔다(게임이 시작하면서 읽는다).
         Paths.ensureDir(dir)
+        Self.restoreGlOnlyMods(instanceDir: dir)
 
         // 마인크래프트는 logs/ · crash-reports/ · screenshots/ 를 **상대 경로**로 연다.
         // (log4j 의 RollingRandomAccessFile 이 "logs/latest.log" 를 그대로 쓴다)
@@ -387,6 +402,7 @@ struct GameLauncher {
             framebuffer: framebuffer
         )
         GameOptions.syncIris(file: dir.appending(path: "config/iris.properties"))
+        GameOptions.disableForgeSplash(instanceDir: dir, mcVersion: meta.mcVersion)
 
         // 네이티브 라이브러리(LWJGL·렌더러·OpenAL)는 앱 번들 Frameworks/ 에 있다.
         //
@@ -473,6 +489,14 @@ struct GameLauncher {
         // 자동 표시만 끈다. 키보드는 다른 버전처럼 키보드 버튼으로 열고, 입력은 그대로 간다.
         // ⚠️ 이 힌트만으로는 안 막힌다 — 실제 차단은 flame_sdl.m 의 flame_suppressSDLAutoKeyboard.
         env["SDL_ENABLE_SCREEN_KEYBOARD"] = "0"
+        // ⚠️ SDL 이 여는 GL 파일을 **LWJGL 과 같은 절대경로**로 맞춘다.
+        //    26.3 의 GlBackend 는 LWJGL 이 연 GL 파일 경로를 그대로 SDL 에 넘기는데,
+        //    SDL 이 이미 다른 경로(기본 OpenGLES.framework)로 열어 뒀으면 문자열 비교로 거절한다:
+        //      BackendCreationException: OpenGL is not supported: OpenGL library already loaded
+        //    그러면 게임은 Vulkan 으로 떨어지고, GL 전용인 Iris 가 컨텍스트 없이 호출하다
+        //    JVM 이 통째로 죽는다(FATAL ERROR in native method: No context is current).
+        env["SDL_OPENGL_LIBRARY"] = "\(frameworks)/\(renderer.libName)"
+        env["SDL_VIDEO_GL_DRIVER"] = "\(frameworks)/\(renderer.libName)"
 
         // ⚠️ MobileGlues 는 "아는 런처"(FCL/ZaLith/PGW/플러그인)가 아니면 설정을 전부
         //    기본값으로 되돌린다 — compute shader·FSR1·GLSL 캐시가 통째로 꺼진다
@@ -705,6 +729,25 @@ struct GameLauncher {
 
     /// 게임 인자. 1.12 이하는 매니페스트가 준 placeholder 문자열을 치환하고,
     /// 1.13+ 는 표준 `--key value` 목록을 만든다. 안드로이드와 같은 분기.
+    /// 예전 빌드가 꺼둔 GL 전용 모드(Iris/Oculus)를 되돌린다.
+    ///
+    /// 26.3 에서 GL 백엔드가 안 만들어지던 동안에는 Iris 를 꺼야 게임이 떴다
+    /// (GL 컨텍스트 없이 호출해 JVM 이 통째로 죽었다). SDL 을 패치해 ANGLE(=MobileGlues)
+    /// 위에 GL 백엔드를 세운 뒤로는 끌 이유가 없다 — 그때 이름만 바꿔둔 파일을 돌려놓는다.
+    static func restoreGlOnlyMods(instanceDir: URL) {
+        let modsDir = instanceDir.appending(path: "mods")
+        let fm = FileManager.default
+        let files = (try? fm.contentsOfDirectory(atPath: modsDir.path)) ?? []
+        for name in files where name.hasSuffix(".gl-only-disabled") {
+            let from = modsDir.appending(path: name)
+            let to = modsDir.appending(path: String(name.dropLast(".gl-only-disabled".count)))
+            guard !fm.fileExists(atPath: to.path) else { continue }
+            if (try? fm.moveItem(at: from, to: to)) != nil {
+                print("[FlameLauncher] ↩️ GL 전용 모드 복구: \(to.lastPathComponent)")
+            }
+        }
+    }
+
     /// 1.7.2 이하의 옛 에셋 배치를 만든다 — 그 시절 게임은 해시 폴더(objects/)를 모르고
     /// **파일 이름 그대로** 찾는다. 이게 없으면 1.6~1.7.2 는 메뉴 글자가 번역 키로 나오고,
     /// 1.5.2 이하는 소리가 전부 빠진다.

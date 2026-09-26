@@ -215,6 +215,8 @@ struct GameView: View {
                 do {
                     let code = try await runtime.boot(javaHome: plan.javaHome, argv: plan.argv)
                     // JLI_Launch 가 반환했다 = 게임 종료(또는 부팅 실패).
+                    // 실제로 뜬 JVM 이 끝난 경우에만 표시한다 — 부팅 실패(음수)는 JVM 이 뜬 적이 없다.
+                    if NativeJavaRuntime.launchFailureReason(code) == nil { launcher.noteJVMExited() }
                     if let reason = NativeJavaRuntime.launchFailureReason(code) {
                         bootError = reason
                     } else if code != 0 {

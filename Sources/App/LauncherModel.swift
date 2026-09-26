@@ -34,6 +34,16 @@ final class LauncherModel {
     ///    예전에는 그냥 아무 일도 일어나지 않아서, 눌러도 반응이 없는 것처럼 보였다.
     private(set) var bootedInstanceId: String?
 
+    /// 그 JVM 이 **이미 끝났는가**.
+    ///
+    /// 게임에서 "게임 종료"를 누르면 JVM 이 정말 죽는다. 멈춰 둔 게 아니라 없어진 것이라
+    /// 같은 인스턴스라도 이 프로세스에서는 다시 못 띄운다. 예전에는 그대로 게임 화면으로
+    /// 넘어가서 두 번째 JLI_Launch 를 불렀고, 아무것도 안 뜬 채 검은 화면만 남았다.
+    private(set) var jvmExited = false
+
+    /// 게임이 끝나 JVM 이 사라졌다고 알려준다(부팅 실패는 해당 없음 — 그땐 JVM 이 뜬 적이 없다).
+    func noteJVMExited() { jvmExited = true }
+
 
 
     // MARK: - 재시작을 건너뛰고 이어서 실행하기
@@ -208,15 +218,18 @@ final class LauncherModel {
     // MARK: - 실행
 
     func launch(_ meta: InstanceMeta) {
-        // 이미 다른 인스턴스로 JVM 을 띄운 프로세스라면 여기서 막고 재시작을 안내한다.
-        if let booted = bootedInstanceId, booted != meta.id {
+        // 이미 JVM 을 쓴 프로세스라면 여기서 막고 재시작을 안내한다.
+        // 다른 인스턴스는 클래스패스부터 다르고, **끝난 JVM 은 같은 인스턴스라도** 못 되살린다.
+        if let booted = bootedInstanceId, booted != meta.id || jvmExited {
             let name = InstanceStore.shared.instances.first { $0.id == booted }?.name ?? booted
-            print("[Flame] 버전 전환 필요: \(name) -> \(meta.name)")
-            let body = "이번 실행에서는 \(name) 을(를) 이미 띄웠습니다. "
+            print("[Flame] 재시작 필요: \(name) -> \(meta.name) (끝난 JVM: \(jvmExited))")
+            let body = (jvmExited
+                ? String(localized: "게임을 끝내면 자바 가상머신도 같이 사라집니다. ")
+                : "이번 실행에서는 \(name) 을(를) 이미 띄웠습니다. ")
                 + String(localized: "자바 가상머신은 앱 실행당 한 번만 뜰 수 있어서 앱이 새로 떠야 합니다.\n\n")
                 + "전환을 누르면 JIT 도구를 거쳐 알아서 다시 뜨고, \(meta.name) 가 바로 실행됩니다."
             alert = AlertMessage(
-                title: "\(meta.name) 로 전환할까요?",
+                title: jvmExited ? "\(meta.name) 를 다시 실행할까요?" : "\(meta.name) 로 전환할까요?",
                 message: body,
                 confirmTitle: String(localized: "전환"),
                 confirm: { [weak self] in self?.switchTo(meta) },

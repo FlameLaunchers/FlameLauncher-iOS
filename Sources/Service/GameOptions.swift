@@ -135,6 +135,29 @@ enum GameOptions {
     }
 
     /// Iris 셰이더 그림자 렌더 거리 최소화. options.txt 와 같이 최초 1회만 적용.
+    /// 1.12.x Forge 의 로딩 스플래시(SplashProgress)를 끈다.
+    ///
+    /// SplashProgress 는 **별도 스레드에서 GL 컨텍스트를 가져간다.** 그동안 클라이언트
+    /// 스레드에는 현재 컨텍스트가 없어서, preInit 에서 GL 을 만지는 모드가 그대로 터진다
+    /// (실측: Better Questing → Framebuffer.enableStencil →
+    ///  "glCheckFramebufferStatus returned unknown status:0" — ANGLE 은 컨텍스트가 없으면 0 을 준다).
+    /// 데스크톱은 컨텍스트 공유로 넘어가지만 모바일 GL 스택은 컨텍스트 하나뿐이다.
+    /// 안드로이드는 예전부터 이걸 끈다(MinecraftActivity). 1.13+ 에는 이 구조가 없다.
+    static func disableForgeSplash(instanceDir: URL, mcVersion: String) {
+        guard mcVersion.range(of: #"\b1\.12(\.\d+)?\b"#, options: .regularExpression) != nil else { return }
+        let file = instanceDir.appending(path: "config/splash.properties")
+
+        // 이미 있으면 enabled 만 고치고 나머지 키는 그대로 둔다(Forge 가 만들어 둔 값 보존).
+        var lines = (try? String(contentsOf: file, encoding: .utf8))?
+            .components(separatedBy: .newlines) ?? []
+        if lines.contains(where: { $0.trimmingCharacters(in: .whitespaces) == "enabled=false" }) { return }
+        lines.removeAll { $0.trimmingCharacters(in: .whitespaces).hasPrefix("enabled=") }
+        lines.append("enabled=false")
+
+        Paths.ensureDir(file.deletingLastPathComponent())
+        try? lines.joined(separator: "\n").write(to: file, atomically: true, encoding: .utf8)
+    }
+
     static func syncIris(file: URL) {
         let marker = file.deletingLastPathComponent().appending(path: ".flame_iris_applied")
         guard !FileManager.default.fileExists(atPath: marker.path) else { return }

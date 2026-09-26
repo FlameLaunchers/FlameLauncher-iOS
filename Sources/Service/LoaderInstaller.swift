@@ -131,10 +131,24 @@ struct ForgeProcessorRunner {
         let extracted = instanceDir.appending(path: "installer/extracted")
         try Zip.unzip(installerJar, to: extracted)
 
-        guard let profileData = try? Data(contentsOf: extracted.appending(path: "version.json")),
-              let profile = try? JSONSerialization.jsonObject(with: profileData) as? [String: Any],
-              let mainClass = profile["mainClass"] as? String
-        else { throw LoaderInstallError.missingField("version.json / mainClass") }
+        // ⚠️ 1.12.2 이하(레거시) 설치기에는 **version.json 이 없다.** 같은 내용이
+        //    install_profile.json 의 `versionInfo` 에 통째로 들어 있고, 유니버설 jar 도
+        //    메이븐이 아니라 설치기 안에 들어 있다. (안드로이드는 예전부터 양쪽을 다 읽는다)
+        let installProfile = extracted.appending(path: "install_profile.json")
+        let installRoot = (try? Data(contentsOf: installProfile))
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? nil
+
+        let profile: [String: Any]
+        if let data = try? Data(contentsOf: extracted.appending(path: "version.json")),
+           let modern = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            profile = modern
+        } else if let legacy = installRoot?["versionInfo"] as? [String: Any] {
+            profile = legacy
+        } else {
+            throw LoaderInstallError.missingField("version.json / versionInfo")
+        }
+        guard let mainClass = profile["mainClass"] as? String
+        else { throw LoaderInstallError.missingField("mainClass") }
 
         // 라이브러리 내려받기 (Forge 는 저장소가 네 곳에 흩어져 있다)
         var jars: [String] = []
@@ -156,12 +170,28 @@ struct ForgeProcessorRunner {
             }
         }
 
+        // 레거시: 유니버설 jar 은 메이븐에 그 이름으로 없다(있는 건 -universal 분류자뿐).
+        // 설치기 안에 들어 있으니 꺼내서 라이브러리 자리에 놓고 **클래스패스 맨 앞**에 둔다.
+        if let install = installRoot?["install"] as? [String: Any],
+           let coord = install["path"] as? String, let file = install["filePath"] as? String {
+            let path = Maven.path(coord)
+            let dest = instanceDir.appending(path: "libraries/\(path)")
+            let src = extracted.appending(path: file)
+            if FileManager.default.fileExists(atPath: src.path) {
+                Paths.ensureDir(dest.deletingLastPathComponent())
+                try? FileManager.default.removeItem(at: dest)
+                try? FileManager.default.copyItem(at: src, to: dest)
+            }
+            if FileManager.default.fileExists(atPath: dest.path) {
+                jars.removeAll { $0 == "libraries/\(path)" }
+                jars.insert("libraries/\(path)", at: 0)
+            }
+        }
+
         // 프로세서 체인 — 있으면 실행 계획을 만들어 둔다.
         // iOS 는 설치 전용 JVM 을 못 띄우므로, 게임을 띄우는 그 JVM 이 마인크래프트보다
         // 먼저 이 계획을 실행한다(`kr.co.donghyun.flame.Bootstrap`).
-        let installProfile = extracted.appending(path: "install_profile.json")
-        if let data = try? Data(contentsOf: installProfile),
-           let installData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        if let installData = installRoot,
            let processors = installData["processors"] as? [[String: Any]], !processors.isEmpty {
             let vanillaJars = Self.vanillaLibraryPaths(instanceDir: instanceDir, mcVersion: mcVersion)
             try await ForgeInstallPlanner(
@@ -172,11 +202,16 @@ struct ForgeProcessorRunner {
         }
 
         let args = profile["arguments"] as? [String: Any]
+        // 레거시는 인자가 한 줄짜리 `minecraftArguments` 다(--tweakClass 가 여기 들어 있다).
+        var gameArgs = (args?["game"] as? [Any])?.compactMap { $0 as? String } ?? []
+        if gameArgs.isEmpty, let legacy = profile["minecraftArguments"] as? String {
+            gameArgs = legacy.split(separator: " ").map(String.init)
+        }
         return LoaderInstallResult(
             mainClass: mainClass,
             extraJars: jars,
             gameJvmArgs: (args?["jvm"] as? [Any])?.compactMap { $0 as? String } ?? [],
-            gameArgs: (args?["game"] as? [Any])?.compactMap { $0 as? String } ?? []
+            gameArgs: gameArgs
         )
     }
 
