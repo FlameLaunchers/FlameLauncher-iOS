@@ -182,7 +182,7 @@ GPL-3.0 code may be combined into an AGPL-3.0 work — GPLv3 section 13 permits 
 
 Modifications to upstream projects are not vendored here; they are applied at build time by
 scripts. Those patches, and the full licence text of every upstream, live in
-**[FlameLauncher-Natives](https://github.com/FlameLaunchers/FlameLauncher-Natives)**.
+**[FlameLauncher-SDL3](https://github.com/FlameLaunchers/FlameLauncher-SDL3)**.
 
 See [NOTICE](NOTICE) for the details.
 
